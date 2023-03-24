@@ -1,0 +1,27 @@
+[package]
+name = "q565"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "RGB565 image codec based on QOI"
+repository = "https://github.com/seritools/q565"
+
+[features]
+default = ["alloc"]
+alloc = []
+
+[lib]
+bench = false
+
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }
+png = "0.17.7"
+
+[[bench]]
+name = "bench"
+harness = false
+
+[profile.release]
+incremental = true
+lto = "thin"
+codegen-units = 1

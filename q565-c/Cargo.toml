@@ -1,0 +1,16 @@
+[package]
+name = "q565-c"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+q565 = { path = "../q565", default-features = false }
+
+[lib]
+crate-type = ["staticlib"]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

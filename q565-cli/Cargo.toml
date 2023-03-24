@@ -1,0 +1,24 @@
+[package]
+name = "q565-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+q565 = { path = "../q565" }
+argh = "0.1.10"
+image = { default-features = false, version = "0.24.5", features = [
+  "png",
+  "bmp",
+  "tiff",
+  "jpeg",
+] }
+
+[profile.release]
+incremental = true
+
+[profile.dist]
+inherits = "release"
+incremental = false
+lto = "fat"
+codegen-units = 1
