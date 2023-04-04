@@ -149,7 +149,7 @@ fn decode(options: Decode) -> Result<(), Box<dyn std::error::Error>> {
         q565::alloc_api::decode_to_vec::<LittleEndian>(&q565_input, &mut v)
             .map_err(|e| format!("{e:?}"))?;
 
-    let mut rgb888_raw = Vec::with_capacity(width as usize * height as usize * 3);
+    let mut rgb888_raw = Vec::with_capacity(usize::from(width) * usize::from(height) * 3);
     for pixel888 in v.into_iter().map(rgb565_to_rgb888) {
         rgb888_raw.extend_from_slice(&pixel888);
     }
