@@ -81,7 +81,7 @@ pub unsafe fn streaming_decode_to_slice_unchecked<T: ByteOrder>(
             Q565StreamingDecodeState::Default => {
                 let op = byte >> 6;
                 if op == 0b00 {
-                    let pixel = *context.arr.get_unchecked(byte as usize);
+                    let pixel = *context.arr.get_unchecked(usize::from(byte));
                     set_pixel::<T>(context, pixel, output, &mut output_idx);
                     continue;
                 } else if unlikely(op == 0b11) {
@@ -90,7 +90,7 @@ pub unsafe fn streaming_decode_to_slice_unchecked<T: ByteOrder>(
                         continue;
                     } else if byte != 0xFF {
                         let count = (byte & 0b0011_1111) + 1;
-                        let count = count as usize;
+                        let count = usize::from(count);
 
                         output
                             .get_unchecked_mut(output_idx..)
@@ -138,7 +138,7 @@ pub unsafe fn streaming_decode_to_slice_unchecked<T: ByteOrder>(
                         let g_diff = ((byte1 & 0b0001_1100) >> 2) as i8 - 4;
                         let r_diff = (byte1 & 0b0000_0011) as i8 - 2;
                         let b_diff = (byte >> 6) as i8 - 2;
-                        let index = (byte & 0b0011_1111) as usize;
+                        let index = usize::from(byte & 0b0011_1111);
 
                         apply_diff(context.arr[index], r_diff, g_diff, b_diff)
                     }
@@ -153,7 +153,7 @@ pub unsafe fn streaming_decode_to_slice_unchecked<T: ByteOrder>(
         };
 
         let index = hash(pixel);
-        *context.arr.get_unchecked_mut(index as usize) = pixel;
+        *context.arr.get_unchecked_mut(usize::from(index)) = pixel;
         set_pixel::<T>(context, pixel, output, &mut output_idx);
         context.state = Q565StreamingDecodeState::Default;
     }

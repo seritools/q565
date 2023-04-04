@@ -5,7 +5,7 @@ use crate::{
 use alloc::vec::Vec;
 
 pub fn encode_to_vec(width: u16, height: u16, pixels: &[u16], w: &mut Vec<u8>) -> bool {
-    if width as usize * height as usize != pixels.len() {
+    if usize::from(width) * usize::from(height) != pixels.len() {
         return false;
     }
 
@@ -44,7 +44,7 @@ pub fn encode_to_vec(width: u16, height: u16, pixels: &[u16], w: &mut Vec<u8>) -
         }
 
         let index = hash(pixel);
-        if state.arr[index as usize] == pixel {
+        if state.arr[usize::from(index)] == pixel {
             w.push(index);
             state.prev = pixel;
             // already in arr
@@ -99,8 +99,7 @@ pub fn encode_to_vec(width: u16, height: u16, pixels: &[u16], w: &mut Vec<u8>) -
             w.extend_from_slice(&[0b11111110, a, b]);
         }
 
-        let index = hash(pixel);
-        state.arr[index as usize] = pixel;
+        state.arr[usize::from(index)] = pixel;
         state.prev = pixel;
     }
 
@@ -157,12 +156,12 @@ pub fn decode_to_vec<T: ByteOrder>(
                 }
                 _ => {
                     let count = (byte & 0b0011_1111) + 1;
-                    w.extend(core::iter::repeat(T::to_wire(state.prev)).take(count as usize));
+                    w.extend(core::iter::repeat(T::to_wire(state.prev)).take(usize::from(count)));
                     continue;
                 }
             },
             0b00 => {
-                let pixel = state.arr[byte as usize];
+                let pixel = state.arr[usize::from(byte)];
                 state.prev = pixel;
                 w.push(T::to_wire(pixel));
                 continue;
@@ -183,7 +182,7 @@ pub fn decode_to_vec<T: ByteOrder>(
                     let r_diff = (byte & 0b0000_0011) as i8 - 2;
                     let second_byte = next()?;
                     let b_diff = (second_byte >> 6) as i8 - 2;
-                    let index = (second_byte & 0b0011_1111) as usize;
+                    let index = usize::from(second_byte & 0b0011_1111);
 
                     apply_diff(state.arr[index], r_diff, g_diff, b_diff)
                 }
@@ -203,8 +202,8 @@ pub fn decode_to_vec<T: ByteOrder>(
             _ => unreachable!(),
         };
 
-        let index = hash(pixel);
-        state.arr[index as usize] = pixel;
+        let index = usize::from(hash(pixel));
+        state.arr[index] = pixel;
         state.prev = pixel;
         w.push(T::to_wire(pixel));
     }
