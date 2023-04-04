@@ -176,7 +176,7 @@ pub unsafe fn decode_to_slice_unchecked<T: ByteOrder>(
     let height = u16::from_le_bytes([*data.get_unchecked(6), *data.get_unchecked(7)]);
     let data = data.get_unchecked(8..);
 
-    if output.len() < width as usize * height as usize {
+    if output.len() < usize::from(width) * usize::from(height) {
         return Err(DecodeToSliceUncheckedError::OutputSliceTooSmall);
     }
 
@@ -193,7 +193,7 @@ pub unsafe fn decode_to_slice_unchecked<T: ByteOrder>(
         let op = byte >> 6;
 
         let pixel = if op == 0b00 {
-            let pixel = *state.arr.get_unchecked(byte as usize);
+            let pixel = *state.arr.get_unchecked(usize::from(byte));
             set_pixel::<T>(state, pixel, output, &mut output_idx);
 
             continue;
@@ -203,7 +203,7 @@ pub unsafe fn decode_to_slice_unchecked<T: ByteOrder>(
                 u16::from_le_bytes(pixel)
             } else if byte != 0xFF {
                 let count = (byte & 0b0011_1111) + 1;
-                let count = count as usize;
+                let count = usize::from(count);
 
                 output
                     .get_unchecked_mut(output_idx..)
@@ -242,7 +242,7 @@ pub unsafe fn decode_to_slice_unchecked<T: ByteOrder>(
                 let r_diff = (byte & 0b0000_0011) as i8 - 2;
                 let second_byte = next();
                 let b_diff = (second_byte >> 6) as i8 - 2;
-                let index = (second_byte & 0b0011_1111) as usize;
+                let index = usize::from(second_byte & 0b0011_1111);
 
                 apply_diff(state.arr[index], r_diff, g_diff, b_diff)
             }
@@ -251,7 +251,7 @@ pub unsafe fn decode_to_slice_unchecked<T: ByteOrder>(
         };
 
         let index = hash(pixel);
-        *state.arr.get_unchecked_mut(index as usize) = pixel;
+        *state.arr.get_unchecked_mut(usize::from(index)) = pixel;
         set_pixel::<T>(state, pixel, output, &mut output_idx);
     }
 
