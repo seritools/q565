@@ -5,8 +5,8 @@
 //! ## Header
 //!
 //! - 4-byte magic: `q565`
-//! - u16le width: 1..65535
-//! - u16le height: 1..65535
+//! - u16le width (non-zero)
+//! - u16le height (non-zero)
 //!
 //! ## Stream format
 //!
@@ -20,7 +20,7 @@
 //! ```
 //!
 //! - 2-bit tag b00
-//! - 6-bit index into the color index array: 0..63
+//! - 6-bit index into the color array: 0..63
 //! - A valid encoder must not issue 2 or more consecutive QOI_OP_INDEX chunks to the same index.
 //!   QOI_OP_RUN should be used instead.
 //!
@@ -65,7 +65,7 @@
 //! - 3-bit green channel difference from the indexed array pixel between -4..3
 //! - 2-bit   red channel difference from the indexed array pixel between -2..1
 //! - 2-bit  blue channel difference from the indexed array pixel between -2..1
-//! - 6-bit index into the color index array: 0..63
+//! - 6-bit index into the color array: 0..63
 //!
 //!
 //! ```plain

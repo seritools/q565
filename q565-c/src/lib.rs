@@ -28,6 +28,8 @@ const _: () = {
 /// - `output_len`: Length of the output buffer, in 16-bit words
 ///
 /// Returns the number of pixels written to the output buffer, if successful, or -1 otherwise.
+///
+/// Behavior is undefined if the input is not a valid Q565 image stream.
 #[no_mangle]
 pub unsafe extern "C" fn q565_decode_le(
     context: *mut Q565Context,
@@ -59,6 +61,8 @@ pub unsafe extern "C" fn q565_decode_le(
 /// - `output_len`: Length of the output buffer, in 16-bit words
 ///
 /// Returns the number of pixels written to the output buffer, if successful, or -1 otherwise.
+///
+/// Behavior is undefined if the input is not a valid Q565 image stream.
 #[no_mangle]
 pub unsafe extern "C" fn q565_decode_be(
     context: *mut Q565Context,
@@ -110,8 +114,10 @@ const _: () = {
 /// doesn't accumulate over multiple calls. You'll need to keep track of the number of pixels
 /// written and pass the correct output pointer to further calls.
 ///
-/// Behavior is undefined if the concatenated input is not a valid Q565 image stream, or if the
-/// context is mutated between calls belonging to the same Q565 image stream.
+/// Behavior is undefined if:
+/// - the concatenated input is not a valid Q565 image stream
+/// - if the context is mutated between calls belonging to the same Q565 image stream
+/// - if the output buffer is too small to fit the decoded image.
 #[no_mangle]
 pub unsafe extern "C" fn q565_streaming_decode_le(
     context: *mut Q565StreamingDecodeContext,
@@ -144,8 +150,10 @@ pub unsafe extern "C" fn q565_streaming_decode_le(
 /// doesn't accumulate over multiple calls. You'll need to keep track of the number of pixels
 /// written and pass the correct output pointer to further calls.
 ///
-/// Behavior is undefined if the concatenated input is not a valid Q565 image stream, or if the
-/// context is mutated between calls belonging to the same Q565 image stream.
+/// Behavior is undefined if:
+/// - the concatenated input is not a valid Q565 image stream
+/// - if the context is mutated between calls belonging to the same Q565 image stream
+/// - if the output buffer is too small to fit the decoded image.
 #[no_mangle]
 pub unsafe extern "C" fn q565_streaming_decode_be(
     context: *mut Q565StreamingDecodeContext,
