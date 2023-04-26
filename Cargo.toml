@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["q565", "q565-cli"]
+exclude = ["q565-c"]
+
+[profile.release]
+incremental = true
+lto = "thin"
+codegen-units = 1
+
+[profile.dist]
+inherits = "release"
+incremental = false
+lto = "fat"

@@ -1,3 +1,4 @@
+use core::panic;
 use q565::utils::LittleEndian;
 
 #[test]
@@ -29,22 +30,27 @@ fn roundtrip() {
         }));
 
         let mut encoded = Vec::with_capacity(pixel_count * 2);
-        assert!(q565::alloc_api::encode_to_vec(
+        assert!(q565::encode::Q565EncodeContext::encode_to_vec(
             width as u16,
             height as u16,
             &input,
             &mut encoded
         ));
 
+        let mut encoded2 = Vec::with_capacity(pixel_count * 2);
+        q565::encode::Q565EncodeContext::encode(width as u16, height as u16, &input, &mut encoded2)
+            .unwrap();
+
+        assert_eq!(encoded, encoded2, "encoding mismatch");
+
         let mut safe_decoded = Vec::with_capacity(pixel_count);
-        q565::alloc_api::decode_to_vec::<LittleEndian>(&encoded, &mut safe_decoded).unwrap();
+        q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(&encoded, &mut safe_decoded)
+            .unwrap();
         assert_eq!(input, safe_decoded, "safe decoding failed");
 
         let mut unsafe_decoded = vec![0; pixel_count];
-        let mut state = q565::Q565Context::new();
         unsafe {
-            q565::decode_to_slice_unchecked::<LittleEndian>(
-                &mut state,
+            q565::decode::Q565DecodeContext::decode_to_slice_unchecked::<LittleEndian>(
                 &encoded,
                 &mut unsafe_decoded,
             )
@@ -53,12 +59,11 @@ fn roundtrip() {
         assert_eq!(input, unsafe_decoded, "unsafe decoding failed");
 
         let mut streaming_decoded = vec![0; pixel_count];
-        let mut state = q565::streaming_no_header::Q565StreamingDecodeContext::new();
+        let mut state = q565::decode::streaming_no_header::Q565StreamingDecodeContext::new();
         let mut streaming_output_buf = &mut streaming_decoded[..];
         for chunk in encoded[8..].chunks(512) {
             let pixels_written = unsafe {
-                q565::streaming_no_header::streaming_decode_to_slice_unchecked::<LittleEndian>(
-                    &mut state,
+                state.streaming_decode_to_slice_unchecked::<LittleEndian>(
                     chunk,
                     streaming_output_buf,
                 )

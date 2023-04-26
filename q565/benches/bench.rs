@@ -33,7 +33,7 @@ fn decode(c: &mut Criterion) {
         let image_name = image_path.file_name().unwrap().to_string_lossy();
 
         let mut encoded = Vec::with_capacity(pixel_count * 2);
-        assert!(q565::alloc_api::encode_to_vec(
+        assert!(q565::encode::Q565EncodeContext::encode_to_vec(
             width as u16,
             height as u16,
             &input,
@@ -46,9 +46,11 @@ fn decode(c: &mut Criterion) {
             &encoded,
             |b, input| {
                 let mut output = vec![0; pixel_count];
-                let mut state = q565::Q565Context::new();
                 b.iter(|| unsafe {
-                    q565::decode_to_slice_unchecked::<LittleEndian>(&mut state, input, &mut output)
+                    q565::decode::Q565DecodeContext::decode_to_slice_unchecked::<LittleEndian>(
+                        input,
+                        &mut output,
+                    )
                 })
             },
         );
@@ -59,13 +61,15 @@ fn decode(c: &mut Criterion) {
                 let input = &input[8..];
                 let mut streaming_decoded = vec![0; pixel_count];
                 b.iter(|| {
-                    let mut state = q565::streaming_no_header::Q565StreamingDecodeContext::new();
+                    let mut state =
+                        q565::decode::streaming_no_header::Q565StreamingDecodeContext::new();
                     let mut streaming_output_buf = &mut streaming_decoded[..];
                     for chunk in input.chunks(512) {
                         let pixels_written = unsafe {
-                            q565::streaming_no_header::streaming_decode_to_slice_unchecked::<
-                                LittleEndian,
-                            >(&mut state, chunk, streaming_output_buf)
+                            state.streaming_decode_to_slice_unchecked::<LittleEndian>(
+                                chunk,
+                                streaming_output_buf,
+                            )
                         };
                         streaming_output_buf = &mut streaming_output_buf[pixels_written..];
                     }
@@ -79,7 +83,10 @@ fn decode(c: &mut Criterion) {
                 let mut output = Vec::with_capacity(pixel_count);
                 b.iter(|| {
                     output.clear();
-                    q565::alloc_api::decode_to_vec::<LittleEndian>(input, &mut output)
+                    q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(
+                        input,
+                        &mut output,
+                    )
                 })
             },
         );
@@ -120,16 +127,33 @@ fn encode(c: &mut Criterion) {
         group.throughput(criterion::Throughput::Elements(pixel_count as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("encode", &image_name),
+            BenchmarkId::new("encode_to_vec", &image_name),
             &input,
             |b, input| {
                 let mut encoded = Vec::with_capacity(pixel_count * 2);
                 b.iter(|| {
                     encoded.clear();
-                    q565::alloc_api::encode_to_vec(
+                    q565::encode::Q565EncodeContext::encode_to_vec(
                         width as u16,
                         height as u16,
-                        &input,
+                        input,
+                        &mut encoded,
+                    )
+                })
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("encode_std", &image_name),
+            &input,
+            |b, input| {
+                let mut encoded = Vec::with_capacity(pixel_count * 2);
+                b.iter(|| {
+                    encoded.clear();
+                    q565::encode::Q565EncodeContext::encode(
+                        width as u16,
+                        height as u16,
+                        input,
                         &mut encoded,
                     )
                 })

@@ -1,6 +1,6 @@
 [package]
 name = "q565-c"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -11,6 +11,10 @@ q565 = { path = "../q565", default-features = false }
 crate-type = ["staticlib"]
 
 [profile.release]
-lto = "fat"
 codegen-units = 1
-panic = "abort"
+debug = 2
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 3
+overflow-checks = false

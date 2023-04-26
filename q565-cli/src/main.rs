@@ -108,7 +108,7 @@ fn encode(options: Encode) -> Result<(), Box<dyn std::error::Error>> {
         .collect::<Vec<_>>();
 
     let mut v = Vec::with_capacity(1024 * 1024);
-    assert!(q565::alloc_api::encode_to_vec(
+    assert!(q565::encode::Q565EncodeContext::encode_to_vec(
         width as u16,
         height as u16,
         &rgb565_raw,
@@ -172,7 +172,7 @@ fn encode_raw(options: EncodeRaw) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut v = Vec::with_capacity(1024 * 1024);
 
-    assert!(q565::alloc_api::encode_to_vec(
+    assert!(q565::encode::Q565EncodeContext::encode_to_vec(
         width.get(),
         height.get(),
         &rgb565_raw,
@@ -213,8 +213,8 @@ fn decode(options: Decode) -> Result<(), Box<dyn std::error::Error>> {
     println!("Decoding `{input}`");
 
     let mut v = Vec::with_capacity(1024 * 1024);
-    let q565::alloc_api::Header { width, height } =
-        q565::alloc_api::decode_to_vec::<LittleEndian>(&q565_input, &mut v)
+    let q565::HeaderInfo { width, height } =
+        q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(&q565_input, &mut v)
             .map_err(|e| format!("{e:?}"))?;
 
     let mut rgb888_raw = Vec::with_capacity(usize::from(width) * usize::from(height) * 3);
@@ -242,7 +242,7 @@ fn decode(options: Decode) -> Result<(), Box<dyn std::error::Error>> {
 #[derive(FromArgs)]
 #[argh(subcommand, name = "decode-raw")]
 struct DecodeRaw {
-    /// the input file. If none of the raw flags are set, this may be a PNG, JPG, or BMP.
+    /// the input file
     #[argh(positional)]
     input: String,
     /// the output file
@@ -258,8 +258,8 @@ fn decode_raw(options: DecodeRaw) -> Result<(), Box<dyn std::error::Error>> {
     println!("Decoding `{input}`");
 
     let mut v = Vec::with_capacity(1024 * 1024);
-    let q565::alloc_api::Header { width, height } =
-        q565::alloc_api::decode_to_vec::<LittleEndian>(&q565_input, &mut v)
+    let q565::HeaderInfo { width, height } =
+        q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(&q565_input, &mut v)
             .map_err(|e| format!("{e:?}"))?;
 
     let bytes = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 2) };

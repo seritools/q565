@@ -9,13 +9,13 @@ fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
 }
 
 #[repr(C)]
-pub struct Q565Context {
+pub struct Q565DecodeContext {
     pub internal: [u16; 65],
 }
 
 const _: () = {
-    assert!(size_of::<Q565Context>() == size_of::<q565::Q565Context>());
-    assert!(align_of::<Q565Context>() == align_of::<q565::Q565Context>());
+    assert!(size_of::<Q565DecodeContext>() == size_of::<q565::decode::Q565DecodeContext>());
+    assert!(align_of::<Q565DecodeContext>() == align_of::<q565::decode::Q565DecodeContext>());
 };
 
 /// Decodes a Q565 image from the given input buffer into the given output buffer that is RGB565
@@ -29,10 +29,12 @@ const _: () = {
 ///
 /// Returns the number of pixels written to the output buffer, if successful, or -1 otherwise.
 ///
+/// # Safety
+///
 /// Behavior is undefined if the input is not a valid Q565 image stream.
 #[no_mangle]
 pub unsafe extern "C" fn q565_decode_le(
-    context: *mut Q565Context,
+    context: *mut Q565DecodeContext,
     input: *const u8,
     input_len: usize,
     output: *mut u16,
@@ -41,8 +43,8 @@ pub unsafe extern "C" fn q565_decode_le(
     let input = unsafe { core::slice::from_raw_parts(input, input_len) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, output_len) };
 
-    match q565::decode_to_slice_unchecked::<LittleEndian>(
-        &mut *context.cast::<q565::Q565Context>(),
+    match q565::decode::Q565DecodeContext::decode_to_slice_unchecked_with_state::<LittleEndian>(
+        &mut *context.cast::<q565::decode::Q565DecodeContext>(),
         input,
         output,
     ) {
@@ -62,10 +64,12 @@ pub unsafe extern "C" fn q565_decode_le(
 ///
 /// Returns the number of pixels written to the output buffer, if successful, or -1 otherwise.
 ///
+/// # Safety
+///
 /// Behavior is undefined if the input is not a valid Q565 image stream.
 #[no_mangle]
 pub unsafe extern "C" fn q565_decode_be(
-    context: *mut Q565Context,
+    context: *mut Q565DecodeContext,
     input: *const u8,
     input_len: usize,
     output: *mut u16,
@@ -74,8 +78,8 @@ pub unsafe extern "C" fn q565_decode_be(
     let input = unsafe { core::slice::from_raw_parts(input, input_len) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, output_len) };
 
-    match q565::decode_to_slice_unchecked::<BigEndian>(
-        &mut *context.cast::<q565::Q565Context>(),
+    match q565::decode::Q565DecodeContext::decode_to_slice_unchecked_with_state::<BigEndian>(
+        &mut *context.cast::<q565::decode::Q565DecodeContext>(),
         input,
         output,
     ) {
@@ -92,11 +96,11 @@ pub struct Q565StreamingDecodeContext {
 const _: () = {
     assert!(
         size_of::<Q565StreamingDecodeContext>()
-            == size_of::<q565::streaming_no_header::Q565StreamingDecodeContext>()
+            == size_of::<q565::decode::streaming_no_header::Q565StreamingDecodeContext>()
     );
     assert!(
         align_of::<Q565StreamingDecodeContext>()
-            == align_of::<q565::streaming_no_header::Q565StreamingDecodeContext>()
+            == align_of::<q565::decode::streaming_no_header::Q565StreamingDecodeContext>()
     );
 };
 
@@ -114,6 +118,8 @@ const _: () = {
 /// doesn't accumulate over multiple calls. You'll need to keep track of the number of pixels
 /// written and pass the correct output pointer to further calls.
 ///
+/// # Safety
+///
 /// Behavior is undefined if:
 /// - the concatenated input is not a valid Q565 image stream
 /// - if the context is mutated between calls belonging to the same Q565 image stream
@@ -129,8 +135,8 @@ pub unsafe extern "C" fn q565_streaming_decode_le(
     let input = unsafe { core::slice::from_raw_parts(input, input_len) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, output_len) };
 
-    q565::streaming_no_header::streaming_decode_to_slice_unchecked::<LittleEndian>(
-        &mut *context.cast::<q565::streaming_no_header::Q565StreamingDecodeContext>(),
+    q565::decode::streaming_no_header::Q565StreamingDecodeContext::streaming_decode_to_slice_unchecked::<LittleEndian>(
+        &mut *context.cast::<q565::decode::streaming_no_header::Q565StreamingDecodeContext>(),
         input,
         output,
     ) as isize
@@ -150,6 +156,8 @@ pub unsafe extern "C" fn q565_streaming_decode_le(
 /// doesn't accumulate over multiple calls. You'll need to keep track of the number of pixels
 /// written and pass the correct output pointer to further calls.
 ///
+/// # Safety
+///
 /// Behavior is undefined if:
 /// - the concatenated input is not a valid Q565 image stream
 /// - if the context is mutated between calls belonging to the same Q565 image stream
@@ -165,8 +173,8 @@ pub unsafe extern "C" fn q565_streaming_decode_be(
     let input = unsafe { core::slice::from_raw_parts(input, input_len) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, output_len) };
 
-    q565::streaming_no_header::streaming_decode_to_slice_unchecked::<BigEndian>(
-        &mut *context.cast::<q565::streaming_no_header::Q565StreamingDecodeContext>(),
+    q565::decode::streaming_no_header::Q565StreamingDecodeContext::streaming_decode_to_slice_unchecked::<BigEndian>(
+        &mut *context.cast::<q565::decode::streaming_no_header::Q565StreamingDecodeContext>(),
         input,
         output,
     ) as isize

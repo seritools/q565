@@ -1,6 +1,9 @@
-//! Q565 reference implementation.
+//! Reference implementation for the Q565 image format.
 //!
-//! # Format
+//! Q565 is heavily based on the [QOI Image format](https://qoiformat.org/), but altered to support
+//! the 16-bit RGB565 pixel format (and that format only).
+//!
+//! # Differences from QOI
 //!
 //! ## Header
 //!
@@ -8,252 +11,174 @@
 //! - u16le width (non-zero)
 //! - u16le height (non-zero)
 //!
-//! ## Stream format
+//! ## Color array
 //!
-//! ```plain
-//! .- QOI_OP_INDEX ----------.
-//! |         Byte[0]         |
-//! |  7  6  5  4  3  2  1  0 |
-//! |-------+-----------------|
-//! |  0  0 |     index       |
-//! `-------------------------`
-//! ```
+//! Q565 uses a simplified color array compared to the one from QOI. The "hash" function was
+//! replaced with just adding the bytes of the RGB565 u16 together and keeping the lowest 6 bits of
+//! the result. This resulted in smaller images on average and has the additional bonus of
+//! eliminating the last usage of multiplication in the decoder loop, making it reasonably fast even
+//! on microcontrollers without fast multiplication support.
 //!
-//! - 2-bit tag b00
-//! - 6-bit index into the color array: 0..63
-//! - A valid encoder must not issue 2 or more consecutive QOI_OP_INDEX chunks to the same index.
-//!   QOI_OP_RUN should be used instead.
+//! In addition, pixels that can already be described in one byte are not added to the color array
+//! ([`Q565_OP_DIFF`](consts::Q565_OP_DIFF)). This helps keep the color array from being
+//! flooded with similar colors.
 //!
+//! ## [`Q565_OP_DIFF_INDEXED`](consts::Q565_OP_DIFF_INDEXED)
 //!
-//! ```plain
-//! .- QOI_OP_DIFF -----------.
-//! |         Byte[0]         |
-//! |  7  6  5  4  3  2  1  0 |
-//! |-------+-----+-----+-----|
-//! |  0  1 |  dr |  dg |  db |
-//! `-------------------------`
-//! ```
-//! - 2-bit tag b01
-//! - 2-bit   red channel difference from the previous pixel between -2..1
-//! - 2-bit green channel difference from the previous pixel between -2..1
-//! - 2-bit  blue channel difference from the previous pixel between -2..1
+//! Since we only have 5/6 bits per channel, `Q565_OP_LUMA` was reduced to represent the green
+//! channel difference with just 5 instead of 6 bits. The gained bit is now used as part of the tag,
+//! to discern between the new [`Q565_OP_DIFF_INDEXED`](consts::Q565_OP_DIFF_INDEXED) and
+//! [`Q565_OP_LUMA`](consts::Q565_OP_LUMA).
 //!
+//! `Q565_OP_DIFF_INDEXED` is similar to [`Q565_OP_DIFF`](consts::Q565_OP_DIFF), but instead applies
+//! the difference to a color from the color array. This results in an up to 5% smaller image size,
+//! at the expense of a slower encoder (needing to calculate up to 64 color differences in the worst
+//! case). If a faster encoder is needed, this operation can be omitted.
 //!
-//! ```plain
-//! .- QOI_OP_LUMA -------------------------------------.
-//! |         Byte[0]         |         Byte[1]         |
-//! |  7  6  5  4  3  2  1  0 |  7  6  5  4  3  2  1  0 |
-//! |----------+--------------+-------------+-----------|
-//! |  1  0  0 |  green diff  |   dr - dg   |  db - dg  |
-//! `---------------------------------------------------`
-//! ```
-//! - 3-bit tag b100
-//! - 5-bit green channel difference from the previous pixel -16..15
-//! - 4-bit   red channel difference minus green channel difference -8..7
-//! - 4-bit  blue channel difference minus green channel difference -8..7
+//! # Stream format
 //!
-//!
-//! ```plain
-//! .- QOI_OP_DIFF_INDEXED -----------------------------.
-//! |         Byte[0]         |         Byte[1]         |
-//! |  7  6  5  4  3  2  1  0 |  7  6  5  4  3  2  1  0 |
-//! |----------+--------------+------+------------------|
-//! |  1  0  1 | dg    |  dr  |  db  |            index |
-//! `---------------------------------------------------`
-//! ```
-//! - 3-bit tag b101
-//! - 3-bit green channel difference from the indexed array pixel between -4..3
-//! - 2-bit   red channel difference from the indexed array pixel between -2..1
-//! - 2-bit  blue channel difference from the indexed array pixel between -2..1
-//! - 6-bit index into the color array: 0..63
-//!
-//!
-//! ```plain
-//! .- QOI_OP_RUN ------------.
-//! |         Byte[0]         |
-//! |  7  6  5  4  3  2  1  0 |
-//! |-------+-----------------|
-//! |  1  1 |       run       |
-//! `-------------------------`
-//! ```
-//! - 2-bit tag b11
-//! - 6-bit run-length repeating the previous pixel: 1..62
-//! - The run-length is stored with a bias of -1. Note that the run-lengths 63 and 64 (b111110 and
-//!   b111111) are illegal as they are occupied by the QOI_OP_RGB565 and QOI_OP_END tag.
-//!
-//!
-//! ```plain
-//! .- QOI_OP_RGB565 -----------------------------.
-//! |         Byte[0]         | Byte[1] | Byte[2] |
-//! |  7  6  5  4  3  2  1  0 | 7 .. 0  | 7 .. 0  |
-//! |-------------------------+---------+---------|
-//! |  1  1  1  1  1  1  1  0 | rgb565le          |
-//! `---------------------------------------------`
-//! ```
-//! - 8-bit tag b11111110
-//! - 5-bit   red channel value
-//! - 6-bit green channel value
-//! - 5-bit  blue channel value
-//!
-//! ```plain
-//! .- QOI_OP_END -------------
-//! |         Byte[0]         |
-//! |  7  6  5  4  3  2  1  0 |
-//! |-------------------------+
-//! |  1  1  1  1  1  1  1  1 |
-//! `--------------------------
-//! ```
-//!
-//! End of stream marker
-
-#![cfg_attr(not(test), no_std)]
-
-use utils::{apply_diff, hash, unlikely, ByteOrder};
+//! See [consts] for the different operation types.
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
-
 #[cfg(feature = "alloc")]
-pub mod alloc_api;
-pub mod streaming_no_header;
+pub mod encode;
+
+pub mod decode;
 pub mod utils;
 
-#[repr(C)]
-pub struct Q565Context {
-    pub prev: u16,
-    pub arr: [u16; 64],
+pub use decode::Q565DecodeContext;
+#[cfg(feature = "alloc")]
+pub use encode::Q565EncodeContext;
+
+#[derive(Debug, Clone)]
+pub struct HeaderInfo {
+    pub width: u16,
+    pub height: u16,
 }
 
-impl Q565Context {
-    pub const fn new() -> Self {
-        Self {
-            arr: [0; 64],
-            prev: 0,
-        }
-    }
-}
+pub mod consts {
+    /// Re-emit a pixel from the color array.
+    ///
+    /// ```plain
+    /// .- Q565_OP_INDEX ---------.
+    /// |         Byte[0]         |
+    /// |  7  6  5  4  3  2  1  0 |
+    /// |-------+-----------------|
+    /// |  0  0 |     index       |
+    /// `-------------------------`
+    /// ```
+    ///
+    /// - 2-bit tag b00
+    /// - 6-bit index into the color array: 0..63
+    /// - A valid encoder must not issue 2 or more consecutive Q565_OP_INDEX chunks to the same
+    ///   index. Q565_OP_RUN should be used instead.
+    pub const Q565_OP_INDEX: u8 = 0b0000_0000;
 
-impl Default for Q565Context {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+    /// Calculate a pixel based on a 2-bit difference from the previous pixel.
+    ///
+    /// ```plain
+    /// .- Q565_OP_DIFF ----------.
+    /// |         Byte[0]         |
+    /// |  7  6  5  4  3  2  1  0 |
+    /// |-------+-----+-----+-----|
+    /// |  0  1 |  dr |  dg |  db |
+    /// `-------------------------`
+    /// ```
+    ///
+    /// - 2-bit tag b01
+    /// - 2-bit red channel difference from the previous pixel between -2..1, stored with a bias
+    ///   of 2
+    /// - 2-bit green channel difference from the previous pixel between -2..1, stored with a bias
+    ///   of 2
+    /// - 2-bit blue channel difference from the previous pixel between -2..1, stored with a bias
+    ///   of 2
+    ///
+    /// Since the resulting pixel is already encoded in one byte, it is _not_ added to the color
+    /// array.
+    pub const Q565_OP_DIFF: u8 = 0b0100_0000;
 
-#[derive(Debug)]
-pub enum DecodeToSliceUncheckedError {
-    OutputSliceTooSmall,
-}
+    /// Calculate a pixel based on a 5-bit green-channel difference from the previous pixel, and
+    /// differences to the green-channel difference for red and blue.
+    ///
+    ///  ```plain
+    /// .- Q565_OP_LUMA ------------------------------------.
+    /// |         Byte[0]         |         Byte[1]         |
+    /// |  7  6  5  4  3  2  1  0 |  7  6  5  4  3  2  1  0 |
+    /// |----------+--------------+-------------+-----------|
+    /// |  1  0  0 |  green diff  |   dr - dg   |  db - dg  |
+    /// `---------------------------------------------------`
+    /// ```
+    ///
+    /// - 3-bit tag b100
+    /// - 5-bit green channel difference from the previous pixel (`-16..15`), stored with a bias of
+    ///   16
+    /// - 4-bit red channel difference minus green channel difference (`-8..7`), stored with a bias
+    ///   of 8
+    /// - 4-bit blue channel difference minus green channel difference (`-8..7`), stored with a bias
+    ///   of 8
+    pub const Q565_OP_LUMA: u8 = 0b1000_0000;
 
-/// Decodes a Q565 image into a buffer.
-///
-/// Returns the number of pixels written to the output buffer, if successful.
-///
-/// # Safety
-/// This function does not do *any* bounds checks except checking that the output slice is big
-/// enough to hold the image based on the header size.
-///
-/// The caller needs to ensure that the input is a valid Q565 image. Any failure to do so results
-/// in undefined behavior.
-pub unsafe fn decode_to_slice_unchecked<T: ByteOrder>(
-    state: &mut Q565Context,
-    data: &[u8],
-    output: &mut [u16],
-) -> Result<usize, DecodeToSliceUncheckedError> {
-    unsafe fn set_pixel<T: ByteOrder>(
-        state: &mut Q565Context,
-        pixel: u16,
-        output: &mut [u16],
-        output_idx: &mut usize,
-    ) {
-        state.prev = pixel;
-        *output.get_unchecked_mut(*output_idx) = T::to_wire(pixel);
-        *output_idx += 1;
-    }
+    /// Calculate a pixel based on a color in the color array, and applying a difference to it.
+    ///
+    /// ```plain
+    /// .- Q565_OP_DIFF_INDEXED ----------------------------.
+    /// |         Byte[0]         |         Byte[1]         |
+    /// |  7  6  5  4  3  2  1  0 |  7  6  5  4  3  2  1  0 |
+    /// |----------+--------------+------+------------------|
+    /// |  1  0  1 | dg    |  dr  |  db  |            index |
+    /// `---------------------------------------------------`
+    /// ```
+    ///
+    /// - 3-bit tag b101
+    /// - 3-bit green channel difference from the indexed array pixel between -4..3
+    /// - 2-bit   red channel difference from the indexed array pixel between -2..1
+    /// - 2-bit  blue channel difference from the indexed array pixel between -2..1
+    /// - 6-bit index into the color array: 0..63
+    pub const Q565_OP_DIFF_INDEXED: u8 = 0b1010_0000;
 
-    *state = Q565Context::new();
+    /// Repeats the last pixel.
+    ///
+    /// ```plain
+    /// .- Q565_OP_RUN -----------.
+    /// |         Byte[0]         |
+    /// |  7  6  5  4  3  2  1  0 |
+    /// |-------+-----------------|
+    /// |  1  1 |       run       |
+    /// `-------------------------`
+    /// ```
+    ///
+    /// - 2-bit tag b11
+    /// - 6-bit run-length repeating the previous pixel: 1..62
+    /// - The run-length is stored with a bias of -1. Note that the run-lengths 63 and 64 (`b111110`
+    ///   and `b111111`) are illegal as they are occupied by the Q565_OP_RGB565 and Q565_OP_END tag.
+    pub const Q565_OP_RUN: u8 = 0b1100_0000;
 
-    let width = u16::from_le_bytes([*data.get_unchecked(4), *data.get_unchecked(5)]);
-    let height = u16::from_le_bytes([*data.get_unchecked(6), *data.get_unchecked(7)]);
-    let data = data.get_unchecked(8..);
+    /// Emits a full raw pixel.
+    ///
+    /// ```plain
+    /// .- Q565_OP_RGB565 ----------------------------.
+    /// |         Byte[0]         | Byte[1] | Byte[2] |
+    /// |  7  6  5  4  3  2  1  0 | 7 .. 0  | 7 .. 0  |
+    /// |-------------------------+---------+---------|
+    /// |  1  1  1  1  1  1  1  0 | RGB565LE          |
+    /// `---------------------------------------------`
+    /// ```
+    ///
+    /// - 8-bit tag b11111110
+    /// - 16-bit RGB565 pixel, little-endian
+    pub const Q565_OP_RGB565: u8 = 0b1111_1110;
 
-    if output.len() < usize::from(width) * usize::from(height) {
-        return Err(DecodeToSliceUncheckedError::OutputSliceTooSmall);
-    }
-
-    let mut output_idx = 0;
-    let mut input_idx = 0;
-    let mut next = || {
-        let b = *data.get_unchecked(input_idx);
-        input_idx += 1;
-        b
-    };
-
-    loop {
-        let byte = next();
-        let op = byte >> 6;
-
-        let pixel = if op == 0b00 {
-            let pixel = *state.arr.get_unchecked(usize::from(byte));
-            set_pixel::<T>(state, pixel, output, &mut output_idx);
-
-            continue;
-        } else if unlikely(op == 0b11) {
-            if byte == 0xFE {
-                let pixel = [next(), next()];
-                u16::from_le_bytes(pixel)
-            } else if byte != 0xFF {
-                let count = (byte & 0b0011_1111) + 1;
-                let count = usize::from(count);
-
-                output
-                    .get_unchecked_mut(output_idx..)
-                    .get_unchecked_mut(..count)
-                    .fill(T::to_wire(state.prev));
-                output_idx += count;
-
-                continue;
-            } else {
-                break;
-            }
-        } else if op == 0b01 {
-            let (r_diff, g_diff, b_diff) = (
-                ((byte >> 4) & 0b11) as i8 - 2,
-                ((byte >> 2) & 0b11) as i8 - 2,
-                (byte & 0b11) as i8 - 2,
-            );
-
-            let pixel = apply_diff(state.prev, r_diff, g_diff, b_diff);
-            set_pixel::<T>(state, pixel, output, &mut output_idx);
-
-            continue;
-        } else if op == 0b10 {
-            if byte & 0b0010_0000 == 0 {
-                let g_diff = (byte & 0b0001_1111) as i8 - 16;
-                let rg_bg_diffs = next();
-                let (rg_diff, bg_diff) = (
-                    (rg_bg_diffs >> 4) as i8 - 8,
-                    (rg_bg_diffs & 0b1111) as i8 - 8,
-                );
-                let (r_diff, b_diff) = (rg_diff + g_diff, bg_diff + g_diff);
-
-                apply_diff(state.prev, r_diff, g_diff, b_diff)
-            } else {
-                let g_diff = ((byte & 0b0001_1100) >> 2) as i8 - 4;
-                let r_diff = (byte & 0b0000_0011) as i8 - 2;
-                let second_byte = next();
-                let b_diff = (second_byte >> 6) as i8 - 2;
-                let index = usize::from(second_byte & 0b0011_1111);
-
-                apply_diff(state.arr[index], r_diff, g_diff, b_diff)
-            }
-        } else {
-            unsafe { core::hint::unreachable_unchecked() }
-        };
-
-        let index = hash(pixel);
-        *state.arr.get_unchecked_mut(usize::from(index)) = pixel;
-        set_pixel::<T>(state, pixel, output, &mut output_idx);
-    }
-
-    Ok(output_idx)
+    /// Marks the end of the stream.
+    ///
+    /// ```plain
+    /// .- Q565_OP_END -----------.
+    /// |         Byte[0]         |
+    /// |  7  6  5  4  3  2  1  0 |
+    /// |-------------------------+
+    /// |  1  1  1  1  1  1  1  1 |
+    /// `-------------------------`
+    /// ```
+    pub const Q565_OP_END: u8 = 0b1111_1111;
 }
