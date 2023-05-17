@@ -1,6 +1,10 @@
 use argh::FromArgs;
 use image::{ImageFormat, RgbImage};
-use q565::utils::{rgb565_to_rgb888, rgb888_to_rgb565, LittleEndian};
+use q565::{
+    byteorder::{BigEndian, LittleEndian},
+    utils::rgb888_to_rgb565,
+    Rgb565, Rgb888,
+};
 use std::{fs::File, io::BufReader, num::NonZeroU16, str::FromStr};
 
 /// Q565 cli encoder and decoder.
@@ -213,16 +217,20 @@ fn decode(options: Decode) -> Result<(), Box<dyn std::error::Error>> {
     println!("Decoding `{input}`");
 
     let mut v = Vec::with_capacity(1024 * 1024);
-    let q565::HeaderInfo { width, height } =
-        q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(&q565_input, &mut v)
-            .map_err(|e| format!("{e:?}"))?;
+    let (_, q565::HeaderInfo { width, height }) =
+        q565::decode::Q565DecodeContext::decode::<BigEndian>(
+            &q565_input,
+            q565::decode::VecDecodeOutput::<Rgb888>::new(&mut v),
+        )
+        .map_err(|e| format!("{e:?}"))?;
 
-    let mut rgb888_raw = Vec::with_capacity(usize::from(width) * usize::from(height) * 3);
-    for pixel888 in v.into_iter().map(rgb565_to_rgb888) {
-        rgb888_raw.extend_from_slice(&pixel888);
-    }
+    let len = v.len();
+    let cap = v.capacity();
+    let raw = v.as_mut_ptr();
+    std::mem::forget(v);
+    let v = unsafe { Vec::from_raw_parts(raw.cast::<u8>(), len * 3, cap * 3) };
 
-    RgbImage::from_vec(width as u32, height as u32, rgb888_raw)
+    RgbImage::from_vec(width as u32, height as u32, v)
         .ok_or("failed to create image")?
         .save_with_format(
             &output,
@@ -238,7 +246,7 @@ fn decode(options: Decode) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Decodes a Q565 image.
+/// Decodes a Q565 image into raw RGB565LE bytes.
 #[derive(FromArgs)]
 #[argh(subcommand, name = "decode-raw")]
 struct DecodeRaw {
@@ -258,9 +266,12 @@ fn decode_raw(options: DecodeRaw) -> Result<(), Box<dyn std::error::Error>> {
     println!("Decoding `{input}`");
 
     let mut v = Vec::with_capacity(1024 * 1024);
-    let q565::HeaderInfo { width, height } =
-        q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(&q565_input, &mut v)
-            .map_err(|e| format!("{e:?}"))?;
+    let (_, q565::HeaderInfo { width, height }) =
+        q565::decode::Q565DecodeContext::decode::<LittleEndian>(
+            &q565_input,
+            q565::decode::VecDecodeOutput::<Rgb565>::new(&mut v),
+        )
+        .map_err(|e| format!("{e:?}"))?;
 
     let bytes = unsafe { std::slice::from_raw_parts(v.as_ptr().cast::<u8>(), v.len() * 2) };
     std::fs::write(&output, bytes)?;

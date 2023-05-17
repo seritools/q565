@@ -42,15 +42,15 @@
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
-#[cfg(feature = "alloc")]
-pub mod encode;
+
+pub use byteorder;
+use byteorder::{BigEndian, ByteOrder, NativeEndian};
+use utils::rgb565_to_rgb888;
 
 pub mod decode;
-pub mod utils;
-
-pub use decode::Q565DecodeContext;
 #[cfg(feature = "alloc")]
-pub use encode::Q565EncodeContext;
+pub mod encode;
+pub mod utils;
 
 #[derive(Debug, Clone)]
 pub struct HeaderInfo {
@@ -181,4 +181,35 @@ pub mod consts {
     /// `-------------------------`
     /// ```
     pub const Q565_OP_END: u8 = 0b1111_1111;
+}
+
+pub trait ColorFormat {
+    type OutputElement: Clone;
+
+    fn to_output<B: ByteOrder>(color: u16) -> Self::OutputElement;
+}
+
+pub enum Rgb565 {}
+impl ColorFormat for Rgb565 {
+    type OutputElement = u16;
+
+    fn to_output<B: ByteOrder>(color: u16) -> Self::OutputElement {
+        let mut n = [0u8; 2];
+        NativeEndian::write_u16(&mut n, color);
+        B::read_u16(&n)
+    }
+}
+
+pub enum Rgb888 {}
+impl ColorFormat for Rgb888 {
+    type OutputElement = [u8; 3];
+
+    fn to_output<B: ByteOrder>(color: u16) -> Self::OutputElement {
+        let big_endian = rgb565_to_rgb888(color);
+        let u24 = BigEndian::read_u24(&big_endian);
+
+        let mut rgb888_encoded = [0u8; 3];
+        B::write_u24(&mut rgb888_encoded, u24);
+        rgb888_encoded
+    }
 }

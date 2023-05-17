@@ -1,4 +1,5 @@
-use crate::utils::{apply_diff, hash, unlikely, ByteOrder};
+use crate::utils::{apply_diff, hash};
+use byteorder::{ByteOrder, NativeEndian};
 use core::hint::unreachable_unchecked;
 
 #[derive(Debug)]
@@ -71,7 +72,11 @@ impl Q565StreamingDecodeContext {
             output_idx: &mut usize,
         ) {
             state.prev = pixel;
-            *output.get_unchecked_mut(*output_idx) = T::to_wire(pixel);
+
+            let mut buf = [0u8; 2];
+            NativeEndian::write_u16(&mut buf, pixel);
+
+            *output.get_unchecked_mut(*output_idx) = T::read_u16(&buf);
             *output_idx += 1;
         }
 
@@ -80,44 +85,52 @@ impl Q565StreamingDecodeContext {
             let pixel = match self.state {
                 Q565StreamingDecodeState::Default => {
                     let op = byte >> 6;
-                    if op == 0b00 {
-                        let pixel = *self.arr.get_unchecked(usize::from(byte));
-                        set_pixel::<T>(self, pixel, output, &mut output_idx);
-                        continue;
-                    } else if unlikely(op == 0b11) {
-                        if byte == 0xFE {
-                            self.state = Q565StreamingDecodeState::RawRgb565Byte1;
-                            continue;
-                        } else if byte != 0xFF {
-                            let count = (byte & 0b0011_1111) + 1;
-                            let count = usize::from(count);
 
-                            output
-                                .get_unchecked_mut(output_idx..)
-                                .get_unchecked_mut(..count)
-                                .fill(T::to_wire(self.prev));
-                            output_idx += count;
-
+                    match op {
+                        0b00 => {
+                            let pixel = *self.arr.get_unchecked(usize::from(byte));
+                            set_pixel::<T>(self, pixel, output, &mut output_idx);
                             continue;
-                        } else {
-                            return output_idx;
                         }
-                    } else if op == 0b01 {
-                        let (r_diff, g_diff, b_diff) = (
-                            ((byte >> 4) & 0b11) as i8 - 2,
-                            ((byte >> 2) & 0b11) as i8 - 2,
-                            (byte & 0b11) as i8 - 2,
-                        );
+                        0b01 => {
+                            let (r_diff, g_diff, b_diff) = (
+                                ((byte >> 4) & 0b11) as i8 - 2,
+                                ((byte >> 2) & 0b11) as i8 - 2,
+                                (byte & 0b11) as i8 - 2,
+                            );
 
-                        let pixel = apply_diff(self.prev, r_diff, g_diff, b_diff);
-                        set_pixel::<T>(self, pixel, output, &mut output_idx);
+                            let pixel = apply_diff(self.prev, r_diff, g_diff, b_diff);
+                            set_pixel::<T>(self, pixel, output, &mut output_idx);
 
-                        continue;
-                    } else if op == 0b10 {
-                        self.state = Q565StreamingDecodeState::LumaOrDiffIndexedByte2(byte);
-                        continue;
-                    } else {
-                        unsafe { unreachable_unchecked() }
+                            continue;
+                        }
+                        0b10 => {
+                            self.state = Q565StreamingDecodeState::LumaOrDiffIndexedByte2(byte);
+                            continue;
+                        }
+                        0b11 => {
+                            if byte == 0xFE {
+                                self.state = Q565StreamingDecodeState::RawRgb565Byte1;
+                                continue;
+                            } else if byte != 0xFF {
+                                let count = (byte & 0b0011_1111) + 1;
+                                let count = usize::from(count);
+
+                                let mut buf = [0u8; 2];
+                                NativeEndian::write_u16(&mut buf, self.prev);
+
+                                output
+                                    .get_unchecked_mut(output_idx..)
+                                    .get_unchecked_mut(..count)
+                                    .fill(T::read_u16(&buf));
+                                output_idx += count;
+
+                                continue;
+                            } else {
+                                return output_idx;
+                            }
+                        }
+                        _ => unsafe { unreachable_unchecked() },
                     }
                 }
                 Q565StreamingDecodeState::LumaOrDiffIndexedByte2(byte1) => {

@@ -1,5 +1,5 @@
 use core::panic;
-use q565::utils::LittleEndian;
+use q565::{byteorder::LittleEndian, Rgb565};
 
 #[test]
 fn roundtrip() {
@@ -43,20 +43,24 @@ fn roundtrip() {
 
         assert_eq!(encoded, encoded2, "encoding mismatch");
 
-        let mut safe_decoded = Vec::with_capacity(pixel_count);
-        q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(&encoded, &mut safe_decoded)
+        let mut decoded_to_vec = Vec::with_capacity(pixel_count);
+        let decoded_to_vec_output =
+            q565::decode::VecDecodeOutput::<Rgb565>::new(&mut decoded_to_vec);
+        q565::decode::Q565DecodeContext::decode::<LittleEndian>(&encoded, decoded_to_vec_output)
             .unwrap();
-        assert_eq!(input, safe_decoded, "safe decoding failed");
+        assert_eq!(input, decoded_to_vec, "safe decoding failed");
 
-        let mut unsafe_decoded = vec![0; pixel_count];
+        let mut unsafe_decoded_to_slice = vec![0u16; pixel_count];
         unsafe {
-            q565::decode::Q565DecodeContext::decode_to_slice_unchecked::<LittleEndian>(
+            let unsafe_decoded_to_slice_output =
+                q565::decode::UnsafeSliceDecodeOutput::<Rgb565>::new(&mut unsafe_decoded_to_slice);
+            q565::decode::Q565DecodeContext::decode_unchecked::<LittleEndian>(
                 &encoded,
-                &mut unsafe_decoded,
+                unsafe_decoded_to_slice_output,
             )
-        }
-        .unwrap();
-        assert_eq!(input, unsafe_decoded, "unsafe decoding failed");
+            .unwrap()
+        };
+        assert_eq!(input, unsafe_decoded_to_slice, "unsafe decoding failed");
 
         let mut streaming_decoded = vec![0; pixel_count];
         let mut state = q565::decode::streaming_no_header::Q565StreamingDecodeContext::new();

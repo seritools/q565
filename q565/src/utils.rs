@@ -67,36 +67,3 @@ pub const fn rgb565_to_rgb888(input: u16) -> [u8; 3] {
 
     [r as u8, g as u8, b as u8]
 }
-
-pub trait ByteOrder {
-    fn to_wire(n: u16) -> u16;
-}
-
-/// Marker type for the big endian byte order.
-pub enum BigEndian {}
-impl ByteOrder for BigEndian {
-    #[inline]
-    fn to_wire(n: u16) -> u16 {
-        n.to_be()
-    }
-}
-
-/// Marker type for the little endian byte order.
-pub enum LittleEndian {}
-impl ByteOrder for LittleEndian {
-    #[inline]
-    fn to_wire(n: u16) -> u16 {
-        n.to_le()
-    }
-}
-
-#[inline]
-#[cold]
-fn cold() {}
-#[inline]
-pub(crate) fn unlikely(b: bool) -> bool {
-    if b {
-        cold()
-    }
-    b
-}

@@ -1,6 +1,6 @@
 [package]
 name = "q565"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "RGB565 image codec based on QOI"
@@ -15,6 +15,7 @@ alloc = []
 bench = false
 
 [dependencies]
+byteorder = { version = "1.4.3", default-features = false }
 snafu = { version = "0.7.4", default-features = false, features = [
   "rust_1_61",
 ] }

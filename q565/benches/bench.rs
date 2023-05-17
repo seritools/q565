@@ -1,8 +1,9 @@
+use byteorder::LittleEndian;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use q565::utils::LittleEndian;
+use q565::{Rgb565, Rgb888};
 
 fn decode(c: &mut Criterion) {
-    let mut group = c.benchmark_group("test_images");
+    let mut group = c.benchmark_group("test_images decode");
 
     for image in std::fs::read_dir("test_images").unwrap() {
         let image_path = image.unwrap().path();
@@ -42,14 +43,53 @@ fn decode(c: &mut Criterion) {
 
         group.throughput(criterion::Throughput::Elements(pixel_count as u64));
         group.bench_with_input(
-            BenchmarkId::new("unsafe", &image_name),
+            BenchmarkId::new("unsafe rgb565", &image_name),
             &encoded,
             |b, input| {
                 let mut output = vec![0; pixel_count];
                 b.iter(|| unsafe {
-                    q565::decode::Q565DecodeContext::decode_to_slice_unchecked::<LittleEndian>(
+                    q565::decode::Q565DecodeContext::decode_unchecked::<LittleEndian>(
                         input,
-                        &mut output,
+                        q565::decode::UnsafeSliceDecodeOutput::<Rgb565>::new(&mut output),
+                    )
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("unsafe rgb888", &image_name),
+            &encoded,
+            |b, input| {
+                let mut output = vec![[0; 3]; pixel_count];
+                b.iter(|| unsafe {
+                    q565::decode::Q565DecodeContext::decode_unchecked::<LittleEndian>(
+                        input,
+                        q565::decode::UnsafeSliceDecodeOutput::<Rgb888>::new(&mut output),
+                    )
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("safe rgb565", &image_name),
+            &encoded,
+            |b, input| {
+                let mut output = Vec::with_capacity(pixel_count);
+                b.iter(|| {
+                    q565::decode::Q565DecodeContext::decode::<LittleEndian>(
+                        input,
+                        q565::decode::VecDecodeOutput::<Rgb565>::new(&mut output),
+                    )
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("safe rgb888", &image_name),
+            &encoded,
+            |b, input| {
+                let mut output = Vec::with_capacity(pixel_count);
+                b.iter(|| {
+                    q565::decode::Q565DecodeContext::decode::<LittleEndian>(
+                        input,
+                        q565::decode::VecDecodeOutput::<Rgb888>::new(&mut output),
                     )
                 })
             },
@@ -76,25 +116,11 @@ fn decode(c: &mut Criterion) {
                 })
             },
         );
-        group.bench_with_input(
-            BenchmarkId::new("safe", &image_name),
-            &encoded,
-            |b, input| {
-                let mut output = Vec::with_capacity(pixel_count);
-                b.iter(|| {
-                    output.clear();
-                    q565::decode::Q565DecodeContext::decode_to_vec::<LittleEndian>(
-                        input,
-                        &mut output,
-                    )
-                })
-            },
-        );
     }
 }
 
 fn encode(c: &mut Criterion) {
-    let mut group = c.benchmark_group("test_images");
+    let mut group = c.benchmark_group("test_images encode");
 
     for image in std::fs::read_dir("test_images").unwrap() {
         let image_path = image.unwrap().path();

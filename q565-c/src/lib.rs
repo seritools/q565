@@ -1,7 +1,10 @@
 #![no_std]
 
 use core::mem::{align_of, size_of};
-use q565::utils::{BigEndian, LittleEndian};
+use q565::{
+    byteorder::{BigEndian, LittleEndian},
+    Rgb565, Rgb888,
+};
 
 #[panic_handler]
 fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
@@ -43,10 +46,10 @@ pub unsafe extern "C" fn q565_decode_le(
     let input = unsafe { core::slice::from_raw_parts(input, input_len) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, output_len) };
 
-    match q565::decode::Q565DecodeContext::decode_to_slice_unchecked_with_state::<LittleEndian>(
+    match q565::decode::Q565DecodeContext::decode_unchecked_with_state::<LittleEndian>(
         &mut *context.cast::<q565::decode::Q565DecodeContext>(),
         input,
-        output,
+        q565::decode::UnsafeSliceDecodeOutput::<Rgb565>::new(output),
     ) {
         Ok(len) => len as isize,
         Err(_) => -1,
@@ -78,10 +81,80 @@ pub unsafe extern "C" fn q565_decode_be(
     let input = unsafe { core::slice::from_raw_parts(input, input_len) };
     let output = unsafe { core::slice::from_raw_parts_mut(output, output_len) };
 
-    match q565::decode::Q565DecodeContext::decode_to_slice_unchecked_with_state::<BigEndian>(
+    match q565::decode::Q565DecodeContext::decode_unchecked_with_state::<BigEndian>(
         &mut *context.cast::<q565::decode::Q565DecodeContext>(),
         input,
-        output,
+        q565::decode::UnsafeSliceDecodeOutput::<Rgb565>::new(output),
+    ) {
+        Ok(len) => len as isize,
+        Err(_) => -1,
+    }
+}
+
+/// Decodes a Q565 image from the given input buffer into the given output buffer that is BGR888
+/// (RGB888 little-endian).
+///
+/// - `context`: Pointer to space for the context struct
+/// - `input`: Pointer to the input buffer
+/// - `input_len`: Length of the input buffer, in bytes
+/// - `output`: Pointer to the output buffer
+/// - `output_len`: Length of the output buffer, in bytes
+///
+/// Returns the number of pixels written to the output buffer, if successful, or -1 otherwise.
+///
+/// # Safety
+///
+/// Behavior is undefined if the input is not a valid Q565 image stream.
+#[no_mangle]
+pub unsafe extern "C" fn q565_decode_le_rgb888(
+    context: *mut Q565DecodeContext,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> isize {
+    let input = unsafe { core::slice::from_raw_parts(input, input_len) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output.cast(), output_len / 3) };
+
+    match q565::decode::Q565DecodeContext::decode_unchecked_with_state::<LittleEndian>(
+        &mut *context.cast::<q565::decode::Q565DecodeContext>(),
+        input,
+        q565::decode::UnsafeSliceDecodeOutput::<Rgb888>::new(output),
+    ) {
+        Ok(len) => len as isize,
+        Err(_) => -1,
+    }
+}
+
+/// Decodes a Q565 image from the given input buffer into the given output buffer that is RGB888
+/// (big-endian).
+///
+/// - `context`: Pointer to space for the context struct
+/// - `input`: Pointer to the input buffer
+/// - `input_len`: Length of the input buffer, in bytes
+/// - `output`: Pointer to the output buffer
+/// - `output_len`: Length of the output buffer, in bytes
+///
+/// Returns the number of pixels written to the output buffer, if successful, or -1 otherwise.
+///
+/// # Safety
+///
+/// Behavior is undefined if the input is not a valid Q565 image stream.
+#[no_mangle]
+pub unsafe extern "C" fn q565_decode_be_rgb888(
+    context: *mut Q565DecodeContext,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> isize {
+    let input = unsafe { core::slice::from_raw_parts(input, input_len) };
+    let output = unsafe { core::slice::from_raw_parts_mut(output.cast(), output_len / 3) };
+
+    match q565::decode::Q565DecodeContext::decode_unchecked_with_state::<BigEndian>(
+        &mut *context.cast::<q565::decode::Q565DecodeContext>(),
+        input,
+        q565::decode::UnsafeSliceDecodeOutput::<Rgb888>::new(output),
     ) {
         Ok(len) => len as isize,
         Err(_) => -1,
