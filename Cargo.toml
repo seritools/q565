@@ -1,14 +1,24 @@
 [workspace]
 resolver = "2"
-members = ["q565", "q565-cli"]
-exclude = ["q565-c"]
+members = ["q565", "q565-cli", "q565-c"]
+
+[workspace.package]
+edition = "2021"
+version = "0.3.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/seritools/q565"
 
 [profile.release]
 incremental = true
 lto = "thin"
 codegen-units = 1
 
-[profile.dist]
+[profile.clib]
 inherits = "release"
+codegen-units = 1
+debug = 2
+debug-assertions = false
 incremental = false
-lto = "fat"
+lto = 'fat'
+opt-level = 3
+overflow-checks = false

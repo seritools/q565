@@ -1,4 +1,7 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "std")]
+extern crate core;
 
 use core::mem::{align_of, size_of};
 use q565::{
@@ -6,6 +9,7 @@ use q565::{
     Rgb565, Rgb888,
 };
 
+#[cfg(not(feature = "std"))]
 #[panic_handler]
 fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
     unsafe { core::hint::unreachable_unchecked() }

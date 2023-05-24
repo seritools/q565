@@ -528,6 +528,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "q565-c"
+version = "0.3.0"
+dependencies = [
+ "q565",
+]
+
+[[package]]
 name = "q565-cli"
 version = "0.3.0"
 dependencies = [

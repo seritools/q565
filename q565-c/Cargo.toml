@@ -1,20 +1,16 @@
 [package]
 name = "q565-c"
-version = "0.3.0"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-
-[dependencies]
-q565 = { path = "../q565", default-features = false }
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [lib]
 crate-type = ["staticlib"]
 
-[profile.release]
-codegen-units = 1
-debug = 2
-debug-assertions = false
-incremental = false
-lto = 'fat'
-opt-level = 3
-overflow-checks = false
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+q565 = { path = "../q565", default-features = false }
