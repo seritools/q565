@@ -5,7 +5,7 @@ use q565::{Rgb565, Rgb888};
 fn decode(c: &mut Criterion) {
     let mut group = c.benchmark_group("test_images decode");
 
-    for image in std::fs::read_dir("test_images").unwrap() {
+    for image in std::fs::read_dir("../test_images").unwrap() {
         let image_path = image.unwrap().path();
 
         let mut reader = png::Decoder::new(std::fs::File::open(&image_path).unwrap())
@@ -122,7 +122,7 @@ fn decode(c: &mut Criterion) {
 fn encode(c: &mut Criterion) {
     let mut group = c.benchmark_group("test_images encode");
 
-    for image in std::fs::read_dir("test_images").unwrap() {
+    for image in std::fs::read_dir("../test_images").unwrap() {
         let image_path = image.unwrap().path();
 
         let mut reader = png::Decoder::new(std::fs::File::open(&image_path).unwrap())

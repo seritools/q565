@@ -3,7 +3,7 @@ use q565::{byteorder::LittleEndian, Rgb565};
 
 #[test]
 fn roundtrip() {
-    for image in std::fs::read_dir("test_images").unwrap() {
+    for image in std::fs::read_dir("../test_images").unwrap() {
         let image_path = image.unwrap().path();
 
         let mut reader = png::Decoder::new(std::fs::File::open(image_path).unwrap())
