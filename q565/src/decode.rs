@@ -76,7 +76,7 @@ impl Q565DecodeContext {
     pub unsafe fn decode_unchecked<B>(
         data: &[u8],
         output: impl InfallibleDecodeOutput,
-    ) -> Result<usize, DecodeUncheckedError>
+    ) -> Result<(usize, HeaderInfo), DecodeUncheckedError>
     where
         B: ByteOrder,
     {
@@ -188,7 +188,7 @@ impl Q565DecodeContext {
         &mut self,
         data: &[u8],
         mut output: impl InfallibleDecodeOutput,
-    ) -> Result<usize, DecodeUncheckedError>
+    ) -> Result<(usize, HeaderInfo), DecodeUncheckedError>
     where
         B: ByteOrder,
     {
@@ -204,6 +204,8 @@ impl Q565DecodeContext {
 
         let width = u16::from_le_bytes([*data.get_unchecked(4), *data.get_unchecked(5)]);
         let height = u16::from_le_bytes([*data.get_unchecked(6), *data.get_unchecked(7)]);
+        let header = HeaderInfo { width, height };
+
         let data = data.get_unchecked(8..);
 
         if output
@@ -265,7 +267,7 @@ impl Q565DecodeContext {
             set_pixel::<B>(self, pixel, &mut output);
         }
 
-        Ok(output.current_output_position())
+        Ok((output.current_output_position(), header))
     }
 }
 
