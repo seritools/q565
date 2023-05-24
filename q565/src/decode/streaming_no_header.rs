@@ -1,4 +1,7 @@
-use crate::utils::{apply_diff, hash};
+use crate::{
+    decode::ops::{direct_bigger_diff, direct_small_diff, indexed_diff},
+    utils::hash,
+};
 use byteorder::{ByteOrder, NativeEndian};
 use core::hint::unreachable_unchecked;
 
@@ -46,7 +49,7 @@ impl Q565StreamingDecodeContext {
     ///
     /// The caller needs to ensure that the input is a valid Q565 image. Any failure to do so
     /// results in undefined behavior.
-    pub unsafe fn streaming_decode_to_slice_unchecked<T: ByteOrder>(
+    pub unsafe fn streaming_decode_to_slice_unchecked<B: ByteOrder>(
         &mut self,
         input: &[u8],
         output: &mut [u16],
@@ -65,7 +68,7 @@ impl Q565StreamingDecodeContext {
             };
         }
 
-        unsafe fn set_pixel<T: ByteOrder>(
+        unsafe fn set_pixel<B: ByteOrder>(
             state: &mut Q565StreamingDecodeContext,
             pixel: u16,
             output: &mut [u16],
@@ -76,7 +79,7 @@ impl Q565StreamingDecodeContext {
             let mut buf = [0u8; 2];
             NativeEndian::write_u16(&mut buf, pixel);
 
-            *output.get_unchecked_mut(*output_idx) = T::read_u16(&buf);
+            *output.get_unchecked_mut(*output_idx) = B::read_u16(&buf);
             *output_idx += 1;
         }
 
@@ -89,18 +92,12 @@ impl Q565StreamingDecodeContext {
                     match op {
                         0b00 => {
                             let pixel = *self.arr.get_unchecked(usize::from(byte));
-                            set_pixel::<T>(self, pixel, output, &mut output_idx);
+                            set_pixel::<B>(self, pixel, output, &mut output_idx);
                             continue;
                         }
                         0b01 => {
-                            let (r_diff, g_diff, b_diff) = (
-                                ((byte >> 4) & 0b11) as i8 - 2,
-                                ((byte >> 2) & 0b11) as i8 - 2,
-                                (byte & 0b11) as i8 - 2,
-                            );
-
-                            let pixel = apply_diff(self.prev, r_diff, g_diff, b_diff);
-                            set_pixel::<T>(self, pixel, output, &mut output_idx);
+                            let pixel = direct_small_diff(self.prev, byte);
+                            set_pixel::<B>(self, pixel, output, &mut output_idx);
 
                             continue;
                         }
@@ -122,7 +119,7 @@ impl Q565StreamingDecodeContext {
                                 output
                                     .get_unchecked_mut(output_idx..)
                                     .get_unchecked_mut(..count)
-                                    .fill(T::read_u16(&buf));
+                                    .fill(B::read_u16(&buf));
                                 output_idx += count;
 
                                 continue;
@@ -136,25 +133,8 @@ impl Q565StreamingDecodeContext {
                 Q565StreamingDecodeState::LumaOrDiffIndexedByte2(byte1) => {
                     let op = byte1 >> 5;
                     match op {
-                        0b100 => {
-                            let g_diff = (byte1 & 0b0001_1111) as i8 - 16;
-                            let rg_bg_diffs = byte;
-                            let (rg_diff, bg_diff) = (
-                                (rg_bg_diffs >> 4) as i8 - 8,
-                                (rg_bg_diffs & 0b1111) as i8 - 8,
-                            );
-                            let (r_diff, b_diff) = (rg_diff + g_diff, bg_diff + g_diff);
-
-                            apply_diff(self.prev, r_diff, g_diff, b_diff)
-                        }
-                        0b101 => {
-                            let g_diff = ((byte1 & 0b0001_1100) >> 2) as i8 - 4;
-                            let r_diff = (byte1 & 0b0000_0011) as i8 - 2;
-                            let b_diff = (byte >> 6) as i8 - 2;
-                            let index = usize::from(byte & 0b0011_1111);
-
-                            apply_diff(self.arr[index], r_diff, g_diff, b_diff)
-                        }
+                        0b100 => direct_bigger_diff(self.prev, byte1, byte),
+                        0b101 => indexed_diff(&self.arr, byte1, byte),
                         _ => unsafe { unreachable_unchecked() },
                     }
                 }
@@ -169,7 +149,7 @@ impl Q565StreamingDecodeContext {
 
             let index = hash(pixel);
             *self.arr.get_unchecked_mut(usize::from(index)) = pixel;
-            set_pixel::<T>(self, pixel, output, &mut output_idx);
+            set_pixel::<B>(self, pixel, output, &mut output_idx);
             self.state = Q565StreamingDecodeState::Default;
         }
     }

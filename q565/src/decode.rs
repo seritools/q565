@@ -1,5 +1,6 @@
 use crate::{
-    utils::{apply_diff, hash},
+    decode::ops::{direct_bigger_diff, direct_small_diff, indexed_diff},
+    utils::hash,
     ColorFormat, HeaderInfo,
 };
 use byteorder::ByteOrder;
@@ -9,6 +10,8 @@ pub mod streaming_no_header;
 
 #[cfg(feature = "alloc")]
 mod alloc_api;
+mod ops;
+
 #[cfg(feature = "alloc")]
 pub use alloc_api::*;
 
@@ -132,15 +135,15 @@ impl Q565DecodeContext {
                     continue;
                 }
                 0b01 => {
-                    let pixel = self.direct_small_diff(byte);
+                    let pixel = direct_small_diff(self.prev, byte);
                     set_pixel::<B>(self, pixel, &mut output);
                     continue;
                 }
                 0b10 => {
                     if byte & 0b0010_0000 == 0 {
-                        self.direct_bigger_diff(byte, next()?)
+                        direct_bigger_diff(self.prev, byte, next()?)
                     } else {
-                        self.indexed_diff(byte, next()?)
+                        indexed_diff(&self.arr, byte, next()?)
                     }
                 }
                 0b11 => {
@@ -229,15 +232,15 @@ impl Q565DecodeContext {
                     continue;
                 }
                 0b01 => {
-                    let pixel = self.direct_small_diff(byte);
+                    let pixel = direct_small_diff(self.prev, byte);
                     set_pixel::<B>(self, pixel, &mut output);
                     continue;
                 }
                 0b10 => {
                     if byte & 0b0010_0000 == 0 {
-                        self.direct_bigger_diff(byte, next())
+                        direct_bigger_diff(self.prev, byte, next())
                     } else {
-                        self.indexed_diff(byte, next())
+                        indexed_diff(&self.arr, byte, next())
                     }
                 }
                 0b11 => {
@@ -263,42 +266,6 @@ impl Q565DecodeContext {
         }
 
         Ok(output.current_output_position())
-    }
-
-    // OP: 0x101
-    #[inline(always)]
-    fn indexed_diff(&mut self, byte: u8, second_byte: u8) -> u16 {
-        let g_diff = ((byte & 0b0001_1100) >> 2) as i8 - 4;
-        let r_diff = (byte & 0b0000_0011) as i8 - 2;
-        let b_diff = (second_byte >> 6) as i8 - 2;
-        let index = usize::from(second_byte & 0b0011_1111);
-
-        apply_diff(self.arr[index], r_diff, g_diff, b_diff)
-    }
-
-    // OP: 0x01
-    #[inline(always)]
-    fn direct_small_diff(&mut self, byte: u8) -> u16 {
-        let (r_diff, g_diff, b_diff) = (
-            ((byte >> 4) & 0b11) as i8 - 2,
-            ((byte >> 2) & 0b11) as i8 - 2,
-            (byte & 0b11) as i8 - 2,
-        );
-
-        apply_diff(self.prev, r_diff, g_diff, b_diff)
-    }
-
-    // OP: 0x100
-    #[inline(always)]
-    fn direct_bigger_diff(&mut self, byte: u8, rg_bg_diffs: u8) -> u16 {
-        let g_diff = (byte & 0b0001_1111) as i8 - 16;
-        let (rg_diff, bg_diff) = (
-            (rg_bg_diffs >> 4) as i8 - 8,
-            (rg_bg_diffs & 0b1111) as i8 - 8,
-        );
-        let (r_diff, b_diff) = (rg_diff + g_diff, bg_diff + g_diff);
-
-        apply_diff(self.prev, r_diff, g_diff, b_diff)
     }
 }
 

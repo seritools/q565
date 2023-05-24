@@ -5,16 +5,6 @@ pub(crate) const fn hash(pixel: u16) -> u8 {
     a.wrapping_add(b) & 0b111111 // % 64
 }
 
-#[inline]
-pub(crate) const fn apply_diff(prev: u16, r_diff: i8, g_diff: i8, b_diff: i8) -> u16 {
-    let (r, g, b) = decode_565(prev);
-    encode_rgb565_unchecked(
-        sum_n::<5>(r, r_diff),
-        sum_n::<6>(g, g_diff),
-        sum_n::<5>(b, b_diff),
-    )
-}
-
 /// Computes the signed difference between two numbers. (N-bit numbers)
 #[cfg(feature = "alloc")]
 pub(crate) const fn diff_n<const N: u8>(a: u8, b: u8) -> i8 {
