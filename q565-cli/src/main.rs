@@ -217,7 +217,7 @@ fn decode(options: Decode) -> Result<(), Box<dyn std::error::Error>> {
     println!("Decoding `{input}`");
 
     let mut v = Vec::with_capacity(1024 * 1024);
-    let (_, q565::HeaderInfo { width, height }) =
+    let (q565::HeaderInfo { width, height }, _) =
         q565::decode::Q565DecodeContext::decode::<BigEndian>(
             &q565_input,
             q565::decode::VecDecodeOutput::<Rgb888>::new(&mut v),
@@ -266,7 +266,7 @@ fn decode_raw(options: DecodeRaw) -> Result<(), Box<dyn std::error::Error>> {
     println!("Decoding `{input}`");
 
     let mut v = Vec::with_capacity(1024 * 1024);
-    let (_, q565::HeaderInfo { width, height }) =
+    let (q565::HeaderInfo { width, height }, _) =
         q565::decode::Q565DecodeContext::decode::<LittleEndian>(
             &q565_input,
             q565::decode::VecDecodeOutput::<Rgb565>::new(&mut v),

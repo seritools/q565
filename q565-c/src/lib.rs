@@ -55,7 +55,7 @@ pub unsafe extern "C" fn q565_decode_le(
         input,
         q565::decode::UnsafeSliceDecodeOutput::<Rgb565>::new(output),
     ) {
-        Ok((len, _)) => len as isize,
+        Ok((_, len)) => len as isize,
         Err(_) => -1,
     }
 }
@@ -90,7 +90,7 @@ pub unsafe extern "C" fn q565_decode_be(
         input,
         q565::decode::UnsafeSliceDecodeOutput::<Rgb565>::new(output),
     ) {
-        Ok((len, _)) => len as isize,
+        Ok((_, len)) => len as isize,
         Err(_) => -1,
     }
 }
@@ -125,7 +125,7 @@ pub unsafe extern "C" fn q565_decode_le_rgb888(
         input,
         q565::decode::UnsafeSliceDecodeOutput::<Rgb888>::new(output),
     ) {
-        Ok((len, _)) => len as isize,
+        Ok((_, len)) => len as isize,
         Err(_) => -1,
     }
 }
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn q565_decode_be_rgb888(
         input,
         q565::decode::UnsafeSliceDecodeOutput::<Rgb888>::new(output),
     ) {
-        Ok((len, _)) => len as isize,
+        Ok((_, len)) => len as isize,
         Err(_) => -1,
     }
 }
