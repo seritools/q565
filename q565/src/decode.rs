@@ -39,15 +39,21 @@ impl Default for Q565DecodeContext {
 #[derive(Debug, Snafu)]
 #[snafu(module)]
 pub enum DecodeUncheckedError {
+    /// The output is too small to hold the entire image as claimed by the header.
     OutputTooSmall,
 }
 
 #[derive(Debug, Snafu)]
 #[snafu(module)]
 pub enum DecodeError {
+    /// The output is too small to hold the entire image as claimed by the header.
     OutputTooSmall,
+    /// The input data ended before the image was fully decoded.
     UnexpectedEof,
+    /// The image does not start with the magic bytes `q565`.
     InvalidMagic,
+    /// The decoded image data is shorter than the header claims.
+    MissingData,
 }
 
 impl Q565DecodeContext {
@@ -62,46 +68,7 @@ impl Q565DecodeContext {
         state.decode_with_state::<B>(data, output)
     }
 
-    /// Decodes a Q565 image into a buffer.
-    ///
-    /// Returns the number of pixels written to the output buffer, if successful.
-    ///
-    /// # Safety
-    ///
-    /// This function does not do *any* bounds checks except checking that the output slice is big
-    /// enough to hold the image based on the header size.
-    ///
-    /// The caller needs to ensure that the input is a valid Q565 image. Any failure to do so
-    /// results in undefined behavior.
-    pub unsafe fn decode_unchecked<B>(
-        data: &[u8],
-        output: impl InfallibleDecodeOutput,
-    ) -> Result<(usize, HeaderInfo), DecodeUncheckedError>
-    where
-        B: ByteOrder,
-    {
-        let mut state = Q565DecodeContext::new();
-        state.decode_unchecked_with_state::<B>(data, output)
-    }
-
-    pub fn decode_with_state<B>(
-        &mut self,
-        data: &[u8],
-        mut output: impl InfallibleDecodeOutput,
-    ) -> Result<(usize, HeaderInfo), DecodeError>
-    where
-        B: ByteOrder,
-    {
-        #[inline(always)]
-        fn set_pixel<B: ByteOrder>(
-            state: &mut Q565DecodeContext,
-            pixel: u16,
-            output: &mut impl InfallibleDecodeOutput,
-        ) {
-            state.prev = pixel;
-            output.write_pixel::<B>(pixel);
-        }
-
+    fn decode_header(data: &[u8]) -> Result<(HeaderInfo, &[u8]), DecodeError> {
         // Header size plus 1 byte for the end marker
         ensure!(data.len() >= 9, decode_error::UnexpectedEofSnafu);
 
@@ -111,7 +78,19 @@ impl Q565DecodeContext {
 
         let width = u16::from_le_bytes([header[4], header[5]]);
         let height = u16::from_le_bytes([header[6], header[7]]);
-        let header = HeaderInfo { width, height };
+        Ok((HeaderInfo { width, height }, data))
+    }
+
+    pub fn decode_with_state<B>(
+        &mut self,
+        data: &[u8],
+        output: impl InfallibleDecodeOutput,
+    ) -> Result<(usize, HeaderInfo), DecodeError>
+    where
+        B: ByteOrder,
+    {
+        let (header, data) = Self::decode_header(data)?;
+        let (width, height) = (header.width, header.height);
 
         ensure!(
             output
@@ -121,9 +100,21 @@ impl Q565DecodeContext {
             decode_error::OutputTooSmallSnafu
         );
 
+        let position = self.decode_data::<B>(data, output)?;
+
+        Ok((position, header))
+    }
+
+    fn decode_data<B>(
+        &mut self,
+        data: &[u8],
+        mut output: impl InfallibleDecodeOutput,
+    ) -> Result<usize, DecodeError>
+    where
+        B: ByteOrder,
+    {
         let mut data = data.iter().copied();
         let mut next = || data.next().ok_or(DecodeError::UnexpectedEof);
-
         loop {
             let byte = next()?;
             let op = byte >> 6;
@@ -131,12 +122,12 @@ impl Q565DecodeContext {
             let pixel = match op {
                 0b00 => {
                     let pixel = unsafe { *self.arr.get_unchecked(usize::from(byte)) };
-                    set_pixel::<B>(self, pixel, &mut output);
+                    self.set_pixel_infallible_output::<B>(pixel, &mut output);
                     continue;
                 }
                 0b01 => {
                     let pixel = direct_small_diff(self.prev, byte);
-                    set_pixel::<B>(self, pixel, &mut output);
+                    self.set_pixel_infallible_output::<B>(pixel, &mut output);
                     continue;
                 }
                 0b10 => {
@@ -167,13 +158,37 @@ impl Q565DecodeContext {
             unsafe {
                 *self.arr.get_unchecked_mut(usize::from(index)) = pixel;
             }
-            set_pixel::<B>(self, pixel, &mut output);
+            self.set_pixel_infallible_output::<B>(pixel, &mut output);
         }
 
-        Ok((output.current_output_position(), header))
+        Ok(output.current_output_position())
+    }
+}
+
+impl Q565DecodeContext {
+    /// Decodes a Q565 image into a buffer.
+    ///
+    /// Returns the number of pixels written to the output buffer, if successful.
+    ///
+    /// # Safety
+    ///
+    /// This function does not do *any* bounds checks except checking that the output slice is big
+    /// enough to hold the image based on the header size.
+    ///
+    /// The caller needs to ensure that the input is a valid Q565 image. Any failure to do so
+    /// results in undefined behavior.
+    pub unsafe fn decode_unchecked<B>(
+        data: &[u8],
+        output: impl InfallibleDecodeOutput,
+    ) -> Result<(usize, HeaderInfo), DecodeUncheckedError>
+    where
+        B: ByteOrder,
+    {
+        let mut state = Q565DecodeContext::new();
+        state.decode_unchecked_with_state::<B>(data, output)
     }
 
-    /// Decodes a Q565 image into a buffer, with the given state as starting state.
+    /// Decodes a Q565 image into a buffer, with the given state (`self`) as starting state.
     ///
     /// Returns the number of pixels written to the output buffer, if successful.
     ///
@@ -187,26 +202,13 @@ impl Q565DecodeContext {
     pub unsafe fn decode_unchecked_with_state<B>(
         &mut self,
         data: &[u8],
-        mut output: impl InfallibleDecodeOutput,
+        output: impl InfallibleDecodeOutput,
     ) -> Result<(usize, HeaderInfo), DecodeUncheckedError>
     where
         B: ByteOrder,
     {
-        #[inline(always)]
-        fn set_pixel<B: ByteOrder>(
-            state: &mut Q565DecodeContext,
-            pixel: u16,
-            output: &mut impl InfallibleDecodeOutput,
-        ) {
-            state.prev = pixel;
-            output.write_pixel::<B>(pixel);
-        }
-
-        let width = u16::from_le_bytes([*data.get_unchecked(4), *data.get_unchecked(5)]);
-        let height = u16::from_le_bytes([*data.get_unchecked(6), *data.get_unchecked(7)]);
-        let header = HeaderInfo { width, height };
-
-        let data = data.get_unchecked(8..);
+        let (header, data) = Self::decode_header_unchecked(data);
+        let (width, height) = (header.width, header.height);
 
         if output
             .max_len()
@@ -216,6 +218,37 @@ impl Q565DecodeContext {
             return Err(DecodeUncheckedError::OutputTooSmall);
         }
 
+        let position = self.decode_data_unchecked::<B>(data, output);
+        Ok((position, header))
+    }
+
+    unsafe fn decode_header_unchecked(data: &[u8]) -> (HeaderInfo, &[u8]) {
+        let width = u16::from_le_bytes([*data.get_unchecked(4), *data.get_unchecked(5)]);
+        let height = u16::from_le_bytes([*data.get_unchecked(6), *data.get_unchecked(7)]);
+
+        let data = data.get_unchecked(8..);
+        (HeaderInfo { width, height }, data)
+    }
+
+    /// Decodes raw Q565 image data into a buffer, with the given state (`self`) as starting
+    /// state.
+    ///
+    /// Returns the number of pixels written to the output buffer, if successful.
+    ///
+    /// # Safety
+    ///
+    /// This function does not do *any* checks.
+    ///
+    /// The caller needs to ensure that the input is valid Q565 image data and that the output
+    /// is big enough.
+    pub unsafe fn decode_data_unchecked<B>(
+        &mut self,
+        data: &[u8],
+        mut output: impl InfallibleDecodeOutput,
+    ) -> usize
+    where
+        B: ByteOrder,
+    {
         let mut input_idx = 0;
         let mut next = || {
             let b = *data.get_unchecked(input_idx);
@@ -230,12 +263,12 @@ impl Q565DecodeContext {
             let pixel = match op {
                 0b00 => {
                     let pixel = *self.arr.get_unchecked(usize::from(byte));
-                    set_pixel::<B>(self, pixel, &mut output);
+                    self.set_pixel_infallible_output::<B>(pixel, &mut output);
                     continue;
                 }
                 0b01 => {
                     let pixel = direct_small_diff(self.prev, byte);
-                    set_pixel::<B>(self, pixel, &mut output);
+                    self.set_pixel_infallible_output::<B>(pixel, &mut output);
                     continue;
                 }
                 0b10 => {
@@ -264,10 +297,22 @@ impl Q565DecodeContext {
 
             let index = hash(pixel);
             *self.arr.get_unchecked_mut(usize::from(index)) = pixel;
-            set_pixel::<B>(self, pixel, &mut output);
+            self.set_pixel_infallible_output::<B>(pixel, &mut output);
         }
 
-        Ok((output.current_output_position(), header))
+        output.current_output_position()
+    }
+}
+
+impl Q565DecodeContext {
+    #[inline(always)]
+    fn set_pixel_infallible_output<B: ByteOrder>(
+        &mut self,
+        pixel: u16,
+        output: &mut impl InfallibleDecodeOutput,
+    ) {
+        self.prev = pixel;
+        output.write_pixel::<B>(pixel);
     }
 }
 
