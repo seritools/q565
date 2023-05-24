@@ -21,6 +21,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
       - run: cargo build --workspace
       - run: cargo build --workspace --release
+      - run: cargo build -p q565-c --profile clib --no-default-features
   linting:
     name: Linting and formatting
     runs-on: ubuntu-latest
