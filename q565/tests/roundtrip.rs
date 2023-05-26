@@ -1,33 +1,24 @@
-use core::panic;
-use q565::{byteorder::LittleEndian, Rgb565};
+use image::ImageFormat;
+use q565::{byteorder::LittleEndian, utils::rgb888_to_rgb565, Rgb565};
+use std::io::BufReader;
 
 #[test]
 fn roundtrip() {
     for image in std::fs::read_dir("../test_images").unwrap() {
         let image_path = image.unwrap().path();
 
-        let mut reader = png::Decoder::new(std::fs::File::open(image_path).unwrap())
-            .read_info()
-            .unwrap();
-        let width = reader.info().width as usize;
-        let height = reader.info().height as usize;
-        let bpp = reader.info().bytes_per_pixel();
+        let image = image::load(
+            BufReader::new(std::fs::File::open(&image_path).unwrap()),
+            ImageFormat::Png,
+        )
+        .unwrap();
 
-        let mut raw_input = vec![0; reader.output_buffer_size()];
-        reader.next_frame(&mut raw_input).unwrap();
-        drop(reader);
-
+        let width = image.width() as usize;
+        let height = image.height() as usize;
         let pixel_count = width * height;
 
         let mut input = Vec::with_capacity(pixel_count);
-        input.extend(raw_input.chunks(bpp).map(|p| {
-            let &[r, g, b, ..] = p else { panic!("no rgb subpixels?") };
-            let r = r as u16 >> 3;
-            let g = g as u16 >> 2;
-            let b = b as u16 >> 3;
-
-            (r << 11) | (g << 5) | b
-        }));
+        input.extend(image.into_rgb8().pixels().map(|p| rgb888_to_rgb565(p.0)));
 
         let mut encoded = Vec::with_capacity(pixel_count * 2);
         assert!(q565::encode::Q565EncodeContext::encode_to_vec(

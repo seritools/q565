@@ -9,7 +9,7 @@ mod std_api;
 #[cfg(feature = "std")]
 pub use std_api::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Q565EncodeContext {
     pub prev: u16,
     pub prev_components: [u8; 3],
@@ -61,8 +61,8 @@ impl Q565EncodeContext {
 
         loop {
             let Some(&pixel) = pixels.next() else {
-            break;
-        };
+                break;
+            };
 
             if pixel == self.prev {
                 let slice = pixels.as_slice();

@@ -7,13 +7,13 @@ pub(crate) const fn hash(pixel: u16) -> u8 {
 
 /// Computes the signed difference between two numbers. (N-bit numbers)
 #[cfg(feature = "alloc")]
-pub(crate) const fn diff_n<const N: u8>(a: u8, b: u8) -> i8 {
+pub const fn diff_n<const N: u8>(a: u8, b: u8) -> i8 {
     (a.wrapping_sub(b) as i8) << (8 - N) >> (8 - N)
 }
 
 /// Applies an signed difference to a number. (N-bit numbers)
 #[inline]
-pub(crate) const fn sum_n<const N: u8>(a: u8, d: i8) -> u8 {
+pub const fn sum_n<const N: u8>(a: u8, d: i8) -> u8 {
     (((a as i8).wrapping_add(d)) << (8 - N)) as u8 >> (8 - N)
 }
 

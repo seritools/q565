@@ -16,6 +16,7 @@ mod ops;
 pub use alloc_api::*;
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct Q565DecodeContext {
     pub prev: u16,
     pub arr: [u16; 64],

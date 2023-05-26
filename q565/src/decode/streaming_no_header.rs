@@ -5,8 +5,8 @@ use crate::{
 use byteorder::{ByteOrder, NativeEndian};
 use core::hint::unreachable_unchecked;
 
-#[derive(Debug)]
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct Q565StreamingDecodeContext {
     state: Q565StreamingDecodeState,
     prev: u16,
@@ -14,7 +14,7 @@ pub struct Q565StreamingDecodeContext {
 }
 
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Q565StreamingDecodeState {
     Default = 0,
     LumaOrDiffIndexedByte2(u8),

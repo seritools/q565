@@ -33,6 +33,13 @@ impl Q565EncodeContext {
         ctx.encode_with_state(width, height, pixels, w)
     }
 
+    pub fn encode_header<W: Write>(width: u16, height: u16, mut w: W) -> Result<(), EncodeError> {
+        let [w1, w2] = width.to_le_bytes();
+        let [h1, h2] = height.to_le_bytes();
+        let header = [b'q', b'5', b'6', b'5', w1, w2, h1, h2];
+        w.write_all(&header).context(WriteIoSnafu)
+    }
+
     pub fn encode_with_state<W: Write>(
         &mut self,
         width: u16,
@@ -49,16 +56,18 @@ impl Q565EncodeContext {
             }
         );
 
+        Self::encode_header(width, height, &mut w)?;
+        self.encode_pixels(pixels, w)?;
+
+        Ok(())
+    }
+
+    pub fn encode_pixels<W: Write>(&mut self, pixels: &[u16], mut w: W) -> Result<(), EncodeError> {
         macro_rules! w {
             ($bytes:expr) => {
                 w.write_all($bytes).context(WriteIoSnafu)
             };
         }
-
-        let [w1, w2] = width.to_le_bytes();
-        let [h1, h2] = height.to_le_bytes();
-        let header = [b'q', b'5', b'6', b'5', w1, w2, h1, h2];
-        w!(&header)?;
 
         let mut pixels = pixels.iter();
 
@@ -98,6 +107,7 @@ impl Q565EncodeContext {
 
             if self.arr[index] == pixel {
                 w!(&[Q565_OP_INDEX | hash])?;
+
                 // already in arr
                 continue;
             }
@@ -113,6 +123,7 @@ impl Q565EncodeContext {
                 b |= ((r_diff + 2) << 4) as u8;
                 b |= ((g_diff + 2) << 2) as u8;
                 b |= (b_diff + 2) as u8;
+
                 w!(&[b])?;
             } else {
                 let rg_diff = r_diff - g_diff;
@@ -123,6 +134,7 @@ impl Q565EncodeContext {
                         (Q565_OP_LUMA | ((g_diff + 16) as u8)),
                         (((rg_diff + 8) as u8) << 4 | (bg_diff + 8) as u8),
                     ];
+
                     w!(&bytes)?;
                 } else if let Some(bytes) = self.arr_components.iter().enumerate().find_map(
                     |(i, &[r_arr, g_arr, b_arr])| {
@@ -148,6 +160,7 @@ impl Q565EncodeContext {
                     w!(&bytes)?;
                 } else {
                     let [a, b] = pixel.to_le_bytes();
+
                     w!(&[Q565_OP_RGB565, a, b])?;
                 }
 
