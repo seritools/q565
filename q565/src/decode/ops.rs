@@ -38,10 +38,10 @@ pub(crate) const fn direct_bigger_diff(prev: u16, byte: u8, rg_bg_diffs: u8) -> 
 
 #[inline]
 pub(crate) const fn apply_diff(prev: u16, r_diff: i8, g_diff: i8, b_diff: i8) -> u16 {
-    let (r, g, b) = decode_565(prev);
-    encode_rgb565_unchecked(
+    let [r, g, b] = decode_565(prev);
+    encode_rgb565_unchecked([
         sum_n::<5>(r, r_diff),
         sum_n::<6>(g, g_diff),
         sum_n::<5>(b, b_diff),
-    )
+    ])
 }

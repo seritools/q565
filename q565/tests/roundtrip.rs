@@ -1,5 +1,9 @@
 use image::ImageFormat;
-use q565::{byteorder::LittleEndian, utils::rgb888_to_rgb565, Rgb565};
+use q565::{
+    byteorder::LittleEndian,
+    utils::{encode_rgb565_unchecked, rgb888_to_rgb565},
+    Rgb565,
+};
 use std::io::BufReader;
 
 #[test]
@@ -18,7 +22,12 @@ fn roundtrip() {
         let pixel_count = width * height;
 
         let mut input = Vec::with_capacity(pixel_count);
-        input.extend(image.into_rgb8().pixels().map(|p| rgb888_to_rgb565(p.0)));
+        input.extend(
+            image
+                .into_rgb8()
+                .pixels()
+                .map(|p| encode_rgb565_unchecked(rgb888_to_rgb565(p.0))),
+        );
 
         let mut encoded = Vec::with_capacity(pixel_count * 2);
         assert!(q565::encode::Q565EncodeContext::encode_to_vec(
@@ -31,8 +40,21 @@ fn roundtrip() {
         let mut encoded2 = Vec::with_capacity(pixel_count * 2);
         q565::encode::Q565EncodeContext::encode(width as u16, height as u16, &input, &mut encoded2)
             .unwrap();
-
-        assert_eq!(encoded, encoded2, "encoding mismatch");
+        assert_eq!(
+            encoded, encoded2,
+            "encoding mismatch between encode_to_vec and encode to writer"
+        );
+        encoded2.clear();
+        assert!(q565::encode::Q565EncodeContext::encode_iter_to_vec(
+            width as u16,
+            height as u16,
+            &input,
+            &mut encoded2,
+        ));
+        assert_eq!(
+            encoded, encoded2,
+            "encoding mismatch between encode_to_vec and encode_iter_to_vec"
+        );
 
         let mut decoded_to_vec = Vec::with_capacity(pixel_count);
         let decoded_to_vec_output =

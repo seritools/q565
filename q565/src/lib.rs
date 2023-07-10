@@ -45,7 +45,7 @@ extern crate alloc;
 
 pub use byteorder;
 use byteorder::{BigEndian, ByteOrder, NativeEndian};
-use utils::rgb565_to_rgb888;
+use utils::{decode_565, rgb565_to_rgb888};
 
 pub mod decode;
 #[cfg(feature = "alloc")]
@@ -205,7 +205,8 @@ impl ColorFormat for Rgb888 {
     type OutputElement = [u8; 3];
 
     fn to_output<B: ByteOrder>(color: u16) -> Self::OutputElement {
-        let big_endian = rgb565_to_rgb888(color);
+        let rgb565_components = decode_565(color);
+        let big_endian = rgb565_to_rgb888(rgb565_components);
         let u24 = BigEndian::read_u24(&big_endian);
 
         let mut rgb888_encoded = [0u8; 3];

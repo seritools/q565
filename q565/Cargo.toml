@@ -15,13 +15,14 @@ alloc = []
 bench = false
 
 [dependencies]
-byteorder = { version = "1.4.3", default-features = false }
+byteorder = { version = "1.4", default-features = false }
 snafu = { version = "0.7.4", default-features = false, features = [
   "rust_1_61",
 ] }
+itertools = { version = "0.10", default-features = false }
 
 [dev-dependencies]
-criterion = { version = "0.4", features = ["html_reports"] }
+criterion = { version = "0.5.1", features = ["html_reports"] }
 image = { version = "0.24.6", default-features = false, features = [
   "png",
   "webp",

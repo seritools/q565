@@ -3,6 +3,8 @@ use crate::{
     utils::{decode_565, diff_n, hash},
 };
 use alloc::vec::Vec;
+use core::borrow::Borrow;
+use itertools::Itertools;
 
 #[cfg(feature = "std")]
 mod std_api;
@@ -86,44 +88,121 @@ impl Q565EncodeContext {
                 continue;
             }
 
-            self.prev = pixel;
-            let (r, g, b) = decode_565(pixel);
-            let [r_prev, g_prev, b_prev] = self.prev_components;
-            self.prev_components = [r, g, b];
+            self.encode_pixel(pixel, w);
+        }
 
-            let hash = hash(pixel);
-            let index = usize::from(hash);
+        w.push(Q565_OP_END);
 
-            if self.arr[index] == pixel {
-                w.push(hash);
-                // already in arr
+        true
+    }
+
+    pub fn encode_iter_to_vec<I>(width: u16, height: u16, pixels: I, w: &mut Vec<u8>) -> bool
+    where
+        I: IntoIterator,
+        I::Item: Borrow<u16>,
+    {
+        let mut state = Q565EncodeContext::new();
+        state.encode_iter_to_vec_with_state(width, height, pixels, w)
+    }
+
+    pub fn encode_iter_to_vec_with_state<I>(
+        &mut self,
+        width: u16,
+        height: u16,
+        pixels: I,
+        w: &mut Vec<u8>,
+    ) -> bool
+    where
+        I: IntoIterator,
+        I::Item: Borrow<u16>,
+    {
+        w.extend_from_slice(b"q565");
+        w.extend_from_slice(&width.to_le_bytes());
+        w.extend_from_slice(&height.to_le_bytes());
+
+        let mut pixels = pixels.into_iter().peekable();
+
+        loop {
+            let Some(pixel) = pixels.next() else {
+                break;
+            };
+
+            let pixel = *pixel.borrow();
+
+            if pixel == self.prev {
+                let repeats = pixels
+                    .peeking_take_while(|p| *p.borrow() == self.prev)
+                    .count();
+
+                // initial pixel
+                let count = repeats + 1;
+
+                let max_count_count = count / 62;
+                let rest_count = count % 62;
+                for _ in 0..max_count_count {
+                    w.push(0b1100_0000 | (62 - 1));
+                }
+                if rest_count > 0 {
+                    w.push(0b1100_0000 | (rest_count - 1) as u8);
+                }
+
+                // already same as prev, no need to update
+                // already same as prev, already in arr
                 continue;
             }
 
-            let (r_diff, g_diff, b_diff) = (
-                diff_n::<5>(r, r_prev),
-                diff_n::<6>(g, g_prev),
-                diff_n::<5>(b, b_prev),
-            );
+            self.encode_pixel(pixel, w);
+        }
 
-            if matches!((r_diff, g_diff, b_diff), (-2..=1, -2..=1, -2..=1)) {
-                let mut b = Q565_OP_DIFF;
-                b |= ((r_diff + 2) << 4) as u8;
-                b |= ((g_diff + 2) << 2) as u8;
-                b |= (b_diff + 2) as u8;
-                w.push(b);
-            } else {
-                let rg_diff = r_diff - g_diff;
-                let bg_diff = b_diff - g_diff;
+        w.push(Q565_OP_END);
 
-                if matches!((rg_diff, g_diff, bg_diff), (-8..=7, -16..=15, -8..=7)) {
-                    let bytes = [
-                        (Q565_OP_LUMA | ((g_diff + 16) as u8)),
-                        (((rg_diff + 8) as u8) << 4 | (bg_diff + 8) as u8),
-                    ];
-                    w.extend_from_slice(&bytes);
-                } else if let Some(bytes) = self.arr_components.iter().enumerate().find_map(
-                    |(i, &[r_arr, g_arr, b_arr])| {
+        true
+    }
+}
+
+impl Q565EncodeContext {
+    fn encode_pixel(&mut self, pixel: u16, w: &mut Vec<u8>) {
+        self.prev = pixel;
+        let [r, g, b] = decode_565(pixel);
+        let [r_prev, g_prev, b_prev] = self.prev_components;
+        self.prev_components = [r, g, b];
+
+        let hash = hash(pixel);
+        let index = usize::from(hash);
+
+        if self.arr[index] == pixel {
+            w.push(hash);
+            // already in arr
+            return;
+        }
+
+        let (r_diff, g_diff, b_diff) = (
+            diff_n::<5>(r, r_prev),
+            diff_n::<6>(g, g_prev),
+            diff_n::<5>(b, b_prev),
+        );
+
+        if matches!((r_diff, g_diff, b_diff), (-2..=1, -2..=1, -2..=1)) {
+            let mut b = Q565_OP_DIFF;
+            b |= ((r_diff + 2) << 4) as u8;
+            b |= ((g_diff + 2) << 2) as u8;
+            b |= (b_diff + 2) as u8;
+            w.push(b);
+        } else {
+            let rg_diff = r_diff - g_diff;
+            let bg_diff = b_diff - g_diff;
+
+            if matches!((rg_diff, g_diff, bg_diff), (-8..=7, -16..=15, -8..=7)) {
+                let bytes = [
+                    (Q565_OP_LUMA | ((g_diff + 16) as u8)),
+                    (((rg_diff + 8) as u8) << 4 | (bg_diff + 8) as u8),
+                ];
+                w.extend_from_slice(&bytes);
+            } else if let Some(bytes) =
+                self.arr_components
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, &[r_arr, g_arr, b_arr])| {
                         let (r_diff, g_diff, b_diff) = (
                             diff_n::<5>(r, r_arr),
                             diff_n::<6>(g, g_arr),
@@ -141,22 +220,17 @@ impl Q565EncodeContext {
                         } else {
                             None
                         }
-                    },
-                ) {
-                    w.extend_from_slice(&bytes);
-                } else {
-                    let [a, b] = pixel.to_le_bytes();
-                    w.extend_from_slice(&[Q565_OP_RGB565, a, b]);
-                }
-
-                // add to color array
-                self.arr[index] = pixel;
-                self.arr_components[index] = [r, g, b];
+                    })
+            {
+                w.extend_from_slice(&bytes);
+            } else {
+                let [a, b] = pixel.to_le_bytes();
+                w.extend_from_slice(&[Q565_OP_RGB565, a, b]);
             }
+
+            // add to color array
+            self.arr[index] = pixel;
+            self.arr_components[index] = [r, g, b];
         }
-
-        w.push(Q565_OP_END);
-
-        true
     }
 }

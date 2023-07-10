@@ -1,7 +1,10 @@
 use byteorder::LittleEndian;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use image::ImageFormat;
-use q565::{utils::rgb888_to_rgb565, Rgb565, Rgb888};
+use q565::{
+    utils::{encode_rgb565_unchecked, rgb888_to_rgb565},
+    Rgb565, Rgb888,
+};
 use std::io::BufReader;
 
 fn decode(c: &mut Criterion) {
@@ -21,7 +24,12 @@ fn decode(c: &mut Criterion) {
         let pixel_count = width * height;
 
         let mut input = Vec::with_capacity(pixel_count);
-        input.extend(image.into_rgb8().pixels().map(|p| rgb888_to_rgb565(p.0)));
+        input.extend(
+            image
+                .into_rgb8()
+                .pixels()
+                .map(|p| encode_rgb565_unchecked(rgb888_to_rgb565(p.0))),
+        );
 
         let image_name = image_path.file_name().unwrap().to_string_lossy();
 
@@ -128,7 +136,12 @@ fn encode(c: &mut Criterion) {
         let pixel_count = width * height;
 
         let mut input = Vec::with_capacity(pixel_count);
-        input.extend(image.into_rgb8().pixels().map(|p| rgb888_to_rgb565(p.0)));
+        input.extend(
+            image
+                .into_rgb8()
+                .pixels()
+                .map(|p| encode_rgb565_unchecked(rgb888_to_rgb565(p.0))),
+        );
 
         let image_name = image_path.file_name().unwrap().to_string_lossy();
 
@@ -142,6 +155,23 @@ fn encode(c: &mut Criterion) {
                 b.iter(|| {
                     encoded.clear();
                     q565::encode::Q565EncodeContext::encode_to_vec(
+                        width as u16,
+                        height as u16,
+                        input,
+                        &mut encoded,
+                    )
+                })
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("encode_iter_to_vec", &image_name),
+            &input,
+            |b, input| {
+                let mut encoded = Vec::with_capacity(pixel_count * 2);
+                b.iter(|| {
+                    encoded.clear();
+                    q565::encode::Q565EncodeContext::encode_iter_to_vec(
                         width as u16,
                         height as u16,
                         input,

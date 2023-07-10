@@ -2,7 +2,7 @@ use argh::FromArgs;
 use image::{ImageFormat, RgbImage};
 use q565::{
     byteorder::{BigEndian, LittleEndian},
-    utils::rgb888_to_rgb565,
+    utils::{encode_rgb565_unchecked, rgb888_to_rgb565},
     Rgb565, Rgb888,
 };
 use std::{fs::File, io::BufReader, num::NonZeroU16, str::FromStr};
@@ -108,7 +108,7 @@ fn encode(options: Encode) -> Result<(), Box<dyn std::error::Error>> {
     let rgb565_raw = image
         .into_rgb8()
         .pixels()
-        .map(|p| rgb888_to_rgb565(p.0))
+        .map(|p| encode_rgb565_unchecked(rgb888_to_rgb565(p.0)))
         .collect::<Vec<_>>();
 
     let mut v = Vec::with_capacity(1024 * 1024);
