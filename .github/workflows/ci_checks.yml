@@ -19,8 +19,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
+          targets: "thumbv6m-none-eabi"
       - run: cargo build --workspace
-      - run: cargo build -p q565-c --profile clib --no-default-features
+      - run: cargo build -p q565-c --profile clib --no-default-features --target thumbv6m-none-eabi
   linting:
     name: Linting and formatting
     runs-on: ubuntu-latest
