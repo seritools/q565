@@ -531,7 +531,7 @@ dependencies = [
 
 [[package]]
 name = "q565"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "byteorder",
  "criterion",
@@ -542,14 +542,14 @@ dependencies = [
 
 [[package]]
 name = "q565-c"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "q565",
 ]
 
 [[package]]
 name = "q565-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "argh",
  "image",
